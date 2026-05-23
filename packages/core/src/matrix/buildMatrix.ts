@@ -108,7 +108,218 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
     }
   }
 
+  // ---- Activity / Seconds Active ----
+  // Mirrors RPB.gs:2568-2643. Computed from per-player casts × the baseCastTime
+  // modifier captured in trackedMetrics.ts. WCL active% comes directly from
+  // the allPlayersCasting global query (entries[].activeTime / totalTime).
+  appendActivitySection(items, result, perPlayer);
+
   return { items };
+}
+
+interface ClassActivityDef {
+  /** Sum of cast_count × baseCastTime over per-class single-target casts. */
+  st: Array<{ spellIds: number[]; baseCastTime: number }>;
+  /** Same for AoE casts. */
+  aoe: Array<{ spellIds: number[]; baseCastTime: number }>;
+}
+
+/** className → activity-relevant cast definitions. Built once per buildMatrixData call. */
+function buildActivityDefs(): Map<string, ClassActivityDef> {
+  const out = new Map<string, ClassActivityDef>();
+  for (const section of TRACKED_SECTIONS) {
+    if (!section.section.includes(":")) continue;
+    const [cls, kind] = section.section.split(":") as [string, string];
+    if (kind !== "singleTargetCasts" && kind !== "aoeCasts") continue;
+    const def =
+      out.get(cls) ?? ({ st: [], aoe: [] } satisfies ClassActivityDef);
+    const target = kind === "singleTargetCasts" ? def.st : def.aoe;
+    for (const row of section.rows) {
+      // baseCastTime 0 = "Melee - excluded from activity" sentinel in config.
+      const t = row.modifiers.baseCastTime;
+      if (!t || t <= 0) continue;
+      if (row.spellIds.length === 0) continue;
+      target.push({ spellIds: row.spellIds, baseCastTime: t });
+    }
+    out.set(cls, def);
+  }
+  return out;
+}
+
+function appendActivitySection(
+  items: MatrixData["items"],
+  result: RunReportResult,
+  perPlayer: Map<number, PerPlayerData> | undefined,
+): void {
+  items.push({
+    kind: "section",
+    id: "section-activity",
+    label: "Activity / seconds active",
+    category: "casts",
+  });
+
+  // Report duration in seconds. allPlayersCasting.totalTime is in ms.
+  const reportTimeMs = (result.raw.allPlayersCasting.totalTime ?? 0) as number;
+  const reportTimeSec = reportTimeMs > 0 ? reportTimeMs / 1000 : 0;
+
+  // WCL's reported active time per player, in ms.
+  const wclActiveMsByPlayer = new Map<number, number>();
+  for (const entry of result.raw.allPlayersCasting.entries ?? []) {
+    const at = (entry as { activeTime?: number }).activeTime;
+    if (typeof at === "number") wclActiveMsByPlayer.set(entry.id, at);
+  }
+  const wclActiveTrashMsByPlayer = new Map<number, number>();
+  for (const entry of result.raw.allPlayersCastingOnTrash.entries ?? []) {
+    const at = (entry as { activeTime?: number }).activeTime;
+    if (typeof at === "number") wclActiveTrashMsByPlayer.set(entry.id, at);
+  }
+  const trashTotalMs = (result.raw.allPlayersCastingOnTrash.totalTime ??
+    0) as number;
+
+  const activityDefs = buildActivityDefs();
+  const classCache = new Map<number, string>();
+  for (const e of result.raw.allPlayersCasting.entries ?? []) {
+    classCache.set(e.id, (e.type ?? "").replace(/\s+/g, ""));
+  }
+
+  function secondsFor(playerId: number, defs: Array<{ spellIds: number[]; baseCastTime: number }> | undefined): number {
+    if (!defs) return 0;
+    const pp = perPlayer?.get(playerId);
+    if (!pp) return 0;
+    let totalSec = 0;
+    for (const def of defs) {
+      const casts = sumCastsByIds(pp.casts, def.spellIds);
+      if (casts > 0) totalSec += casts * def.baseCastTime;
+    }
+    return totalSec;
+  }
+
+  function stSeconds(playerId: number): number {
+    const cls = classCache.get(playerId);
+    return secondsFor(playerId, cls ? activityDefs.get(cls)?.st : undefined);
+  }
+  function aoeSeconds(playerId: number): number {
+    const cls = classCache.get(playerId);
+    return secondsFor(playerId, cls ? activityDefs.get(cls)?.aoe : undefined);
+  }
+
+  const pending = !perPlayer;
+
+  items.push({
+    kind: "row",
+    id: "activity-total-seconds",
+    label: "Total seconds active",
+    description:
+      "Sum of single-target + AoE casts × each spell's base cast time. Doesn't account for spell-haste gear yet.",
+    category: "casts",
+    pending,
+    cell: (id) => {
+      const v = Math.round(stSeconds(id) + aoeSeconds(id));
+      return v === 0
+        ? { display: "" }
+        : { display: v.toLocaleString(), numeric: v };
+    },
+  });
+
+  items.push({
+    kind: "row",
+    id: "activity-st-seconds",
+    label: "Seconds active (single-target)",
+    description: "Single-target cast time only.",
+    category: "casts",
+    pending,
+    cell: (id) => {
+      const v = Math.round(stSeconds(id));
+      return v === 0
+        ? { display: "" }
+        : { display: v.toLocaleString(), numeric: v };
+    },
+  });
+
+  items.push({
+    kind: "row",
+    id: "activity-aoe-seconds",
+    label: "Seconds active (AoE)",
+    description: "AoE cast time only.",
+    category: "casts",
+    pending,
+    cell: (id) => {
+      const v = Math.round(aoeSeconds(id));
+      return v === 0
+        ? { display: "" }
+        : { display: v.toLocaleString(), numeric: v };
+    },
+  });
+
+  items.push({
+    kind: "row",
+    id: "activity-st-pct",
+    label: "Active % (single-target)",
+    description: "ST seconds / report duration.",
+    category: "casts",
+    pending,
+    cell: (id) => {
+      if (reportTimeSec <= 0) return { display: "" };
+      const pct = Math.round((stSeconds(id) / reportTimeSec) * 100);
+      return pct === 0 ? { display: "" } : { display: `${pct}%`, numeric: pct };
+    },
+  });
+
+  items.push({
+    kind: "row",
+    id: "activity-aoe-pct",
+    label: "Active % (AoE)",
+    description: "AoE seconds / report duration.",
+    category: "casts",
+    pending,
+    cell: (id) => {
+      if (reportTimeSec <= 0) return { display: "" };
+      const pct = Math.round((aoeSeconds(id) / reportTimeSec) * 100);
+      return pct === 0 ? { display: "" } : { display: `${pct}%`, numeric: pct };
+    },
+  });
+
+  items.push({
+    kind: "row",
+    id: "activity-total-pct",
+    label: "Active % (total)",
+    description: "ST% + AoE%.",
+    category: "casts",
+    pending,
+    cell: (id) => {
+      if (reportTimeSec <= 0) return { display: "" };
+      const pct = Math.round(
+        ((stSeconds(id) + aoeSeconds(id)) / reportTimeSec) * 100,
+      );
+      return pct === 0 ? { display: "" } : { display: `${pct}%`, numeric: pct };
+    },
+  });
+
+  // WCL's own active%, from allPlayersCasting. Doesn't need per-player.
+  items.push({
+    kind: "row",
+    id: "activity-wcl-pct",
+    label: "WCL active %",
+    description:
+      "WCL's reported activeTime / totalTime from the casts endpoint. Format: overall (trash) when both are available.",
+    category: "casts",
+    pending: false,
+    cell: (id) => {
+      const totalMs = wclActiveMsByPlayer.get(id) ?? 0;
+      if (totalMs === 0 || reportTimeMs === 0) return { display: "" };
+      const pctTotal = Math.round((totalMs / reportTimeMs) * 100);
+      const trashMs = wclActiveTrashMsByPlayer.get(id) ?? 0;
+      if (trashMs > 0 && trashTotalMs > 0) {
+        const pctTrash = Math.round((trashMs / trashTotalMs) * 100);
+        return {
+          display: `${pctTotal}% (${pctTrash}%)`,
+          numeric: pctTotal,
+          tooltip: `${pctTotal}% overall · ${pctTrash}% on trash`,
+        };
+      }
+      return { display: `${pctTotal}%`, numeric: pctTotal };
+    },
+  });
 }
 
 function makeRow(

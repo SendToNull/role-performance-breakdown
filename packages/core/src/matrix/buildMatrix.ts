@@ -78,6 +78,45 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
       items.push(makeRow(section, row, meta, result, perPlayer));
     }
 
+    // RPB.gs:2551-2565 — at the bottom of each class's AoE casts section,
+    // synthesize a "# of hits per AoE cast on average" row. Excluded for
+    // Druid / Paladin / Warlock because their AoE spells (Hurricane,
+    // Consecration, Hellfire) are pulsing — WCL doesn't report a hit count
+    // for each individual tick, so the ratio would be misleading.
+    if (
+      meta.perClass &&
+      section.section.endsWith(":aoeCasts") &&
+      !["Druid", "Paladin", "Warlock"].includes(meta.perClass)
+    ) {
+      const aoeIds = section.rows
+        .flatMap((r) => r.spellIds)
+        .filter((id) => typeof id === "number");
+      const perClass = meta.perClass;
+      items.push({
+        kind: "row",
+        id: `row-hits-per-aoe-${perClass}`,
+        label: "# of hits per AoE cast (⌀)",
+        description:
+          "Average hits per cast across all of this class's tracked AoE spells (totalHits / totalCasts). Pulsing spells excluded; classes with only pulsing AoE (Druid/Paladin/Warlock) skip this row entirely.",
+        category: "casts",
+        onlyForClass: perClass,
+        pending: !perPlayer,
+        cell: (playerId) => {
+          const pp = perPlayer?.get(playerId);
+          if (!pp || pp.className !== perClass) return { display: "" };
+          const casts = sumCastsByIds(pp.casts, aoeIds);
+          if (casts === 0) return { display: "" };
+          const hits = sumHitsAndMissesByIds(pp.damageDone, aoeIds);
+          const avg = Math.round((hits / casts) * 100) / 100;
+          return {
+            display: avg.toString(),
+            numeric: avg,
+            tooltip: `${hits} hits across ${casts} casts`,
+          };
+        },
+      });
+    }
+
     // The engineering section gets two synthetic summary rows from globals
     // (RPB.gs:4310-4365).
     if (section.section === "engineering") {
@@ -419,9 +458,23 @@ function makeRow(
         // Fall through to cast count if no buff uptime is registered.
       }
       const total = sumCastsByIds(pp.casts, row.spellIds);
-      return total === 0
-        ? { display: "" }
-        : { display: total.toLocaleString(), numeric: total };
+      if (total === 0) return { display: "" };
+      // RPB.gs:2542-2543 — Cleave / Whirlwind rows show avg targets-hit per cast.
+      if (
+        section.section.endsWith(":aoeCasts") &&
+        (row.label.includes("Cleave") || row.label.includes("Whirlwind"))
+      ) {
+        const hits = sumHitsAndMissesByIds(pp.damageDone, row.spellIds);
+        if (hits > 0) {
+          const avg = Math.round((hits / total) * 100) / 100;
+          return {
+            display: `${total} (⌀${avg})`,
+            numeric: total,
+            tooltip: `${total} casts · ${hits} hits across all targets · ~${avg} per cast`,
+          };
+        }
+      }
+      return { display: total.toLocaleString(), numeric: total };
     };
     base.pending = false;
     return base;

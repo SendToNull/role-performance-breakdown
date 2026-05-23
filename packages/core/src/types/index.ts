@@ -58,7 +58,10 @@ export interface TableEntry {
 }
 
 export interface TableResponse {
+  /** Present on casts / damage / healing / interrupts tables. */
   entries: TableEntry[];
+  /** Present on buffs / debuffs tables (the shape WCL returns when grouping by aura). */
+  auras?: Aura[];
   totalTime?: number;
   itemLevel?: number;
 }

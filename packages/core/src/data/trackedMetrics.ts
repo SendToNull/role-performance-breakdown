@@ -15,6 +15,8 @@ export interface TrackedMetric {
     baseCastTime?: number;
     cooldownSec?: number;
     buffDurationSec?: number;
+    /** {true} → count aura bands on the player rather than cast totals. */
+    checkAura?: boolean;
   };
 }
 
@@ -1033,6 +1035,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           34210
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1045,6 +1048,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           51954
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1057,6 +1061,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           40402
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1069,6 +1074,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           35165
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1117,6 +1123,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           37881
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 60,
           "buffDurationSec": 15
         }
@@ -1140,6 +1147,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           29601
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1152,6 +1160,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           38332
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 10
         }
@@ -1164,6 +1173,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           43710
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1187,6 +1197,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           33400
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1199,6 +1210,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           24354
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1222,6 +1234,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           28780
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 15
         }
@@ -1234,6 +1247,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           24546
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 15
         }
@@ -1246,6 +1260,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           24998
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 90,
           "buffDurationSec": 15
         }
@@ -1269,6 +1284,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           23734
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 20
         }
@@ -1281,6 +1297,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           32367
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1293,6 +1310,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           26467
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 30
         }
@@ -1305,6 +1323,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           23733
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 20
         }
@@ -1339,6 +1358,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           24542
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 15
         }
@@ -1351,6 +1371,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           51953
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1363,6 +1384,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           43712
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1375,6 +1397,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           35163
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1387,6 +1410,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           45044
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 90,
           "buffDurationSec": 15
         }
@@ -1399,6 +1423,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           35337
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 90
         }
       },
@@ -1410,6 +1435,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           34000
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1422,6 +1448,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           40396
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1434,6 +1461,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           33662
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 90,
           "buffDurationSec": 15
         }
@@ -1446,6 +1474,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           27675
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 75,
           "buffDurationSec": 15
         }
@@ -1458,6 +1487,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           28779
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1470,6 +1500,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           26166
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 30
         }
@@ -1482,6 +1513,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           23723
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 20
         }
@@ -1494,6 +1526,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           28200
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 60,
           "buffDurationSec": 15
         }
@@ -1506,6 +1539,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           23271
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 90,
           "buffDurationSec": 15
         }
@@ -1518,6 +1552,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           24659
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1552,6 +1587,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           28862
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1564,6 +1600,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           26400
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 20
         }
@@ -1576,6 +1613,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           33479
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1588,6 +1626,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           39228
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1600,6 +1639,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           40538
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 15
         }
@@ -1612,6 +1652,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           36372
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 90,
           "buffDurationSec": 15
         }
@@ -1624,6 +1665,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           33089
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1636,6 +1678,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           46783
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1648,6 +1691,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           31039
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1660,6 +1704,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           31038
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 30
         }
@@ -1672,6 +1717,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           31040
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 20
         }
@@ -1684,6 +1730,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           35169
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1696,6 +1743,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           33668
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 15
         }
@@ -1708,6 +1756,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           38351
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 15
         }
@@ -1720,6 +1769,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           40464
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 20
         }
@@ -1743,6 +1793,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           45049
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 15
         }
@@ -1755,6 +1806,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           51952
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1767,6 +1819,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           26609
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 20
         }
@@ -1779,6 +1832,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           43713
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1802,6 +1856,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           23725
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 20
         }
@@ -1814,6 +1869,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           28773
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1826,6 +1882,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           24610
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 75,
           "buffDurationSec": 15
         }
@@ -1838,6 +1895,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           33807
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 10
         }
@@ -1850,6 +1908,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           40729
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1862,6 +1921,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           43716
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1874,6 +1934,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           33667
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 90,
           "buffDurationSec": 15
         }
@@ -1886,6 +1947,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           35166
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1898,6 +1960,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           35733
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1910,6 +1973,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           40724
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 60,
           "buffDurationSec": 10
         }
@@ -1922,6 +1986,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           51955
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1934,6 +1999,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           33014
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120
         }
       },
@@ -1945,6 +2011,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           26614
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300
         }
       },
@@ -1956,6 +2023,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           31047
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 12
         }
@@ -1968,6 +2036,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           46784
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 90,
           "buffDurationSec": 15
         }
@@ -1980,6 +2049,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           34106
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -1992,6 +2062,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           34519
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 10
         }
@@ -2004,6 +2075,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           26480
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 30
         }
@@ -2016,6 +2088,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           24352
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -2028,6 +2101,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           25891
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -2040,6 +2114,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           29604
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -2052,6 +2127,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           28866
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 15
         }
@@ -2086,6 +2162,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           28777
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -2098,6 +2175,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           24661
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 20
         }
@@ -2110,6 +2188,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           44055
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 15
         }
@@ -2182,7 +2261,9 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
         "spellIds": [
           35081
         ],
-        "modifiers": {}
+        "modifiers": {
+          "checkAura": true
+        }
       },
       {
         "id": "trinketsandracials-band-of-the-eternal-defender-ring",
@@ -2191,7 +2272,9 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
         "spellIds": [
           35078
         ],
-        "modifiers": {}
+        "modifiers": {
+          "checkAura": true
+        }
       },
       {
         "id": "trinketsandracials-band-of-the-eternal-restorer-ring",
@@ -2200,7 +2283,9 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
         "spellIds": [
           35087
         ],
-        "modifiers": {}
+        "modifiers": {
+          "checkAura": true
+        }
       },
       {
         "id": "trinketsandracials-band-of-the-eternal-sage-ring",
@@ -2209,7 +2294,9 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
         "spellIds": [
           35084
         ],
-        "modifiers": {}
+        "modifiers": {
+          "checkAura": true
+        }
       },
       {
         "id": "trinketsandracials-forgotten-knowledge-blade-of-wizardry-weapon",
@@ -2218,7 +2305,9 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
         "spellIds": [
           38317
         ],
-        "modifiers": {}
+        "modifiers": {
+          "checkAura": true
+        }
       },
       {
         "id": "trinketsandracials-haste-manual-crowd-pummeler-weapon",
@@ -2236,7 +2325,9 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
         "spellIds": [
           25907
         ],
-        "modifiers": {}
+        "modifiers": {
+          "checkAura": true
+        }
       },
       {
         "id": "trinketsandracials-spell-vulnerability-nightfall-weapon",
@@ -2256,6 +2347,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           28730
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 2
         }
@@ -2268,6 +2360,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           26635
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 10
         }
@@ -2282,6 +2375,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           33702
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 120,
           "buffDurationSec": 25
         }
@@ -2305,6 +2399,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           2651
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 300,
           "buffDurationSec": 15
         }
@@ -2346,6 +2441,7 @@ export const TRACKED_SECTIONS: TrackedSection[] = [
           20594
         ],
         "modifiers": {
+          "checkAura": true,
           "cooldownSec": 180,
           "buffDurationSec": 8
         }

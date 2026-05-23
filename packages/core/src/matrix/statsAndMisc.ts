@@ -124,11 +124,19 @@ function uptimePct(table: TableResponse, ids: number[]): StatsCell {
   if (totalTime <= 0) return EMPTY;
   let uptimeMs = 0;
   const set = new Set(ids);
-  for (const entry of table.entries ?? []) {
-    const guid = (entry.guid ?? entry.id) as number;
-    if (!set.has(guid)) continue;
-    const up = numOr0(entry["totalUptime"]);
-    uptimeMs += up;
+  // The buffs/debuffs endpoints return data under .auras (RPB.gs uses
+  // *.auras directly). Older code paths also have .entries; check both.
+  const sources: Array<{ guid?: number; totalUptime?: number }> = [
+    ...((table.auras ?? []) as Array<{ guid?: number; totalUptime?: number }>),
+    ...((table.entries ?? []) as Array<{ guid?: number; id?: number; totalUptime?: number }>).map(
+      (e) => ({
+        guid: (e.guid ?? e.id) as number,
+        totalUptime: typeof e.totalUptime === "number" ? e.totalUptime : 0,
+      }),
+    ),
+  ];
+  for (const a of sources) {
+    if (a.guid != null && set.has(a.guid)) uptimeMs += numOr0(a.totalUptime);
   }
   if (uptimeMs <= 0) return EMPTY;
   const pct = Math.round((uptimeMs / totalTime) * 100);
@@ -136,6 +144,9 @@ function uptimePct(table: TableResponse, ids: number[]): StatsCell {
 }
 
 function usesByGuid(table: TableResponse, id: number): number {
+  for (const aura of table.auras ?? []) {
+    if (aura.guid === id) return numOr0(aura.totalUses);
+  }
   for (const entry of table.entries ?? []) {
     const guid = (entry.guid ?? entry.id) as number;
     if (guid === id) return numOr0(entry["totalUses"]);

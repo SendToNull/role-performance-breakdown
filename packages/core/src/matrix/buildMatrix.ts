@@ -415,9 +415,54 @@ function makeRow(
     const isImmolationOrDummy =
       isEngineering &&
       (row.label.includes("Immolation") || row.label.includes("Dummy"));
+
+    // Trinkets/racials with {true} flag count buff aura bands instead of
+    // casts. Mirrors RPB.gs:4186-4214. Cast events for on-use trinkets are
+    // unreliable in WCL (some never log a cast), so the script trusts the
+    // resulting buff aura instead.
+    const checkAura = row.modifiers.checkAura === true;
+    const isMultiFight =
+      result.filters.mode === "all" &&
+      !result.filters.onlyFightId &&
+      !result.filters.noWipes;
+    const buffDurationSec = row.modifiers.buffDurationSec;
+
     base.cell = (playerId) => {
       const pp = perPlayer.get(playerId);
       if (!pp) return { display: "" };
+
+      if (checkAura) {
+        const auras = pp.buffsTotal.auras ?? [];
+        let amount = 0;
+        for (const aura of auras) {
+          if (!row.spellIds.includes(aura.guid)) continue;
+          const bands = aura.bands ?? [];
+          // Apply duration-aware dedup in multi-fight mode if we know the
+          // buff duration. Otherwise count each band as a use.
+          if (
+            isMultiFight &&
+            typeof buffDurationSec === "number" &&
+            buffDurationSec > 0
+          ) {
+            let lastEnd = 0;
+            for (const band of bands) {
+              if (
+                lastEnd === 0 ||
+                lastEnd + buffDurationSec * 1000 < band.endTime
+              ) {
+                amount += 1;
+              }
+              lastEnd = band.endTime;
+            }
+          } else {
+            amount += bands.length;
+          }
+        }
+        return amount === 0
+          ? { display: "" }
+          : { display: amount.toLocaleString(), numeric: amount };
+      }
+
       const amount = sumCastsByIds(pp.casts, row.spellIds);
       if (amount === 0) return { display: "" };
       if (!isEngineering || isImmolationOrDummy) {
@@ -583,19 +628,23 @@ function sumDamageByIds(table: TableResponse, ids: number[]): number {
   return sumCastsByIds(table, ids);
 }
 
-/** Sum buff/debuff totalUptime (ms) across entries matching any of the ids. */
+/** Sum buff/debuff totalUptime (ms) across auras (preferred) and entries. */
 function sumUptimeByIds(table: TableResponse, ids: number[]): number {
-  if (!table?.entries) return 0;
+  if (!table) return 0;
   let total = 0;
   const set = new Set(ids);
-  for (const entry of table.entries) {
+  for (const aura of table.auras ?? []) {
+    if (set.has(aura.guid)) total += numOr0(aura.totalUptime);
+  }
+  for (const entry of table.entries ?? []) {
     const guid = (entry.guid ?? entry.id) as number;
-    if (set.has(guid)) {
-      const up = entry["totalUptime"];
-      if (typeof up === "number") total += up;
-    }
+    if (set.has(guid)) total += numOr0(entry["totalUptime"]);
   }
   return total;
+}
+
+function numOr0(v: unknown): number {
+  return typeof v === "number" ? v : 0;
 }
 
 /**

@@ -1,0 +1,25 @@
+{
+  "name": "@rpb/bot",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js",
+    "register": "node dist/register.js"
+  },
+  "dependencies": {
+    "@rpb/core": "*",
+    "discord.js": "^14.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0"
+  },
+  "bin": {
+    "rpb-bot": "./dist/index.js",
+    "rpb-register": "./dist/register.js"
+  }
+}

@@ -1,0 +1,15 @@
+node_modules/
+dist/
+dist-types/
+*.tsbuildinfo
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.vite/
+coverage/
+.turbo/
+
+# Local-only assets (screenshots, scratch files)
+testing/

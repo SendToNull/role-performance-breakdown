@@ -50,7 +50,7 @@ async function handleRpb(
   cfg: BotConfig,
 ) {
   const report = interaction.options.getString("report", true);
-  const mode = (interaction.options.getString("mode") ?? "onlyBosses") as
+  const mode = (interaction.options.getString("mode") ?? "all") as
     | "all"
     | "onlyBosses"
     | "onlyTrash";

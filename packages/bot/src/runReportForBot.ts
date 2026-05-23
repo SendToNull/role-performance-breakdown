@@ -37,7 +37,7 @@ export async function generateSnapshot(
     apiKey: input.apiKey,
     fetchPerPlayer: true,
     filters: {
-      mode: input.mode ?? "onlyBosses",
+      mode: input.mode ?? "all",
       noWipes: input.noWipes ?? false,
     },
     clientOptions: {

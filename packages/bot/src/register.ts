@@ -28,8 +28,8 @@ const command = new SlashCommandBuilder()
       .setDescription("Which fights to include")
       .setRequired(false)
       .addChoices(
-        { name: "Bosses only (default)", value: "onlyBosses" },
-        { name: "All fights", value: "all" },
+        { name: "All fights (default)", value: "all" },
+        { name: "Bosses only", value: "onlyBosses" },
         { name: "Trash only", value: "onlyTrash" },
       ),
   )

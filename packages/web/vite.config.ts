@@ -10,6 +10,9 @@ export default defineConfig({
   plugins: [react()],
   build: {
     target: "es2022",
-    sourcemap: true,
+    // Sourcemaps off in production so devtools can't show original TS.
+    // The minified JS is still visible to anyone — this just removes the
+    // friendly view. For real source hiding, move the analysis server-side.
+    sourcemap: false,
   },
 });

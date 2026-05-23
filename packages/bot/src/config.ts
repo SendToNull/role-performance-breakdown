@@ -1,5 +1,11 @@
 // All env config in one place — no magic strings sprinkled through handlers.
 
+import * as dotenv from "dotenv";
+
+// `override: true` so a stale DISCORD_TOKEN from another bot in the user's
+// shell environment doesn't shadow ours.
+dotenv.config({ override: true });
+
 export interface BotConfig {
   discordToken: string;
   discordAppId: string;

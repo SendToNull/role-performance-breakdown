@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@rpb/core": "*",
-    "discord.js": "^14.16.3"
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

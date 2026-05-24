@@ -10,6 +10,9 @@ import {
 import { clearApiKey, loadApiKey, saveApiKey } from "./apiKey.js";
 import { ResultView } from "./components/ResultView.js";
 import { SnapshotApp } from "./SnapshotApp.js";
+import { ClaApp } from "./cla/ClaApp.js";
+
+type TopTab = "rpb" | "cla";
 
 function readSnapshotSource():
   | { kind: "inline"; data: string }
@@ -29,8 +32,68 @@ function readSnapshotSource():
 
 export function App() {
   const snapshotSource = useMemo(() => readSnapshotSource(), []);
+  // Snapshot viewer is RPB-only and bypasses the nav.
   if (snapshotSource) return <SnapshotApp source={snapshotSource} />;
-  return <Generator />;
+
+  const [tab, setTab] = useState<TopTab>(() => {
+    return new URLSearchParams(location.search).get("app") === "cla"
+      ? "cla"
+      : "rpb";
+  });
+
+  function switchTo(next: TopTab) {
+    setTab(next);
+    const url = new URL(location.href);
+    if (next === "cla") url.searchParams.set("app", "cla");
+    else url.searchParams.delete("app");
+    history.replaceState(null, "", url.toString());
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <header className="flex items-center justify-between border-b border-zinc-800 px-6 py-3">
+        <h1 className="text-lg font-semibold tracking-tight">
+          WoW Classic TBC Analytics
+        </h1>
+        <nav className="flex gap-1 rounded-md border border-zinc-800 bg-zinc-900/60 p-1 text-sm">
+          <TopTabButton active={tab === "rpb"} onClick={() => switchTo("rpb")}>
+            Role Performance Breakdown
+          </TopTabButton>
+          <TopTabButton active={tab === "cla"} onClick={() => switchTo("cla")}>
+            Combat Log Analytics
+          </TopTabButton>
+        </nav>
+      </header>
+      <div className="flex-1 overflow-auto">
+        {tab === "rpb" ? <Generator /> : <ClaApp />}
+      </div>
+    </div>
+  );
+}
+
+function TopTabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "rounded px-3 py-1.5 text-xs transition " +
+        (active
+          ? "bg-violet-600 text-white"
+          : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-200")
+      }
+    >
+      {children}
+    </button>
+  );
 }
 
 function Generator() {

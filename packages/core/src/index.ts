@@ -13,4 +13,5 @@ export * from "./analysis/snapshot.js";
 export * from "./matrix/types.js";
 export * from "./matrix/buildMatrix.js";
 export * from "./matrix/snapshotBuilder.js";
-export * from "./cla/gearListing.js";
+export * from "./cla/gearIssues.js";
+export * from "./cla/consumables.js";

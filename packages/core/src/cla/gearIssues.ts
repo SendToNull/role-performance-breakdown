@@ -2,17 +2,17 @@
 // Ports the gear-checking logic from GearIssues.gs:290-791.
 //
 // Detects per-player gear problems across all boss fights in a report:
-//   - Missing item in a slot (color: #ff0707 bright red)
-//   - Item with no permanent enchant (color: #f8aaaa light red)
-//   - Item with no gem in a socket (color: #f7cfe1 light pink)
-//   - Common-quality gem (color: #b7b7b7 grey)
-//   - Uncommon-quality gem (color: #bfeeae light green)
-//   - Rare-quality gem (color: #a9c2f1 light blue)
-//   - Meta gem inactive — known-bad meta gem ids (color: #f9cb9c orange)
+//   - Missing item in a slot                          (#ff0707 bright red)
+//   - Item with no permanent enchant                  (#f8aaaa light red)
+//   - Item with a known suboptimal enchant            (#fdf2ce light yellow)
+//   - Item flagged as suboptimal (PvP/riding/etc.)    (#b9a3ee light purple)
+//   - Item with no gem in a socket                    (#f7cfe1 light pink)
+//   - Common-quality gem (ilvl < 60)                  (#b7b7b7 grey)
+//   - Uncommon-quality gem (ilvl == 60)               (#bfeeae light green)
+//   - Meta gem inactive — known-bad meta gem ids      (#f9cb9c orange)
 //
-// Phase 1 ships exact-match issues that don't require the proprietary
-// suboptimal-enchant reference sheet. Phase 2 will add the curated bad-
-// enchant list once we can host it.
+// Rare and epic gems are intentionally NOT flagged (matches the script's
+// "minimum gem quality = uncommon" mode).
 
 import type {
   Fight,
@@ -22,35 +22,67 @@ import type {
 import { WCLClient } from "../wcl/client.js";
 import { makeUrls } from "../wcl/endpoints.js";
 import { parseReportInput } from "../wcl/parseReportInput.js";
+import { BAD_ENCHANTS, SUBOPTIMAL_ITEM_IDS } from "./gearIssueData.js";
 
 export type IssueKind =
-  | "missing"        // no item in this slot
-  | "noEnchant"      // no permanent enchant
-  | "noGem"          // socket without a gem
-  | "commonGem"      // gem itemLevel < 60
-  | "uncommonGem"    // gem itemLevel == 60 (TBC common→uncommon boundary)
-  | "rareGem"        // gem itemLevel 61-99
+  | "missing"          // no item in this slot
+  | "noEnchant"        // no permanent enchant
+  | "badEnchant"       // suboptimal permanent enchant
+  | "suboptimalItem"   // item id is on the curated suboptimal list
+  | "noGem"            // socket without a gem
+  | "commonGem"        // gem itemLevel < 60
+  | "uncommonGem"      // gem itemLevel == 60
   | "metaGemInactive";
 
 export const ISSUE_COLORS: Record<IssueKind, string> = {
   missing: "#ff0707",
   noEnchant: "#f8aaaa",
+  badEnchant: "#fdf2ce",
+  suboptimalItem: "#b9a3ee",
   noGem: "#f7cfe1",
   commonGem: "#b7b7b7",
   uncommonGem: "#bfeeae",
-  rareGem: "#a9c2f1",
   metaGemInactive: "#f9cb9c",
 };
 
 export const ISSUE_LABELS: Record<IssueKind, string> = {
   missing: "no item",
   noEnchant: "no enchant",
+  badEnchant: "bad enchant",
+  suboptimalItem: "suboptimal item",
   noGem: "no gem",
   commonGem: "common gem",
   uncommonGem: "uncommon gem",
-  rareGem: "rare gem",
   metaGemInactive: "meta gem inactive",
 };
+
+// Build a lookup from enchant id → list of bad-enchant entries. Each entry
+// may be slot-specific (e.g. "Bracers - 7 Str" only counts on slot 8) or
+// apply to any slot (slot === null).
+const BAD_ENCHANT_BY_ID = (() => {
+  const m = new Map<number, Array<{ slot: number | null; name: string }>>();
+  for (const e of BAD_ENCHANTS) {
+    const arr = m.get(e.id) ?? [];
+    arr.push({ slot: e.slot, name: e.name });
+    m.set(e.id, arr);
+  }
+  return m;
+})();
+
+function lookupBadEnchant(
+  enchantId: number,
+  slot: number,
+): string | null {
+  const candidates = BAD_ENCHANT_BY_ID.get(enchantId);
+  if (!candidates) return null;
+  // Prefer slot-specific match; fall back to a global entry.
+  let global: string | null = null;
+  for (const c of candidates) {
+    if (c.slot === slot) return c.name;
+    if (c.slot === null) global = c.name;
+  }
+  return global;
+}
 
 /**
  * Bright/iconic items the script always considers fine (Onyxia Scale Cloak,
@@ -239,10 +271,10 @@ export async function fetchGearIssues(
         const name = typeof r["name"] === "string" ? r["name"] : "(unknown)";
         slotsSeen.add(slot);
 
-        // --- No enchant ---
+        // --- No enchant / suboptimal enchant ---
         if (ENCHANTABLE_SLOTS.has(slot)) {
-          const hasEnchant = r["permanentEnchant"] != null;
-          if (!hasEnchant) {
+          const enchantRaw = r["permanentEnchant"];
+          if (enchantRaw == null) {
             mergeIssue(agg, fight, {
               kind: "noEnchant",
               itemId,
@@ -251,7 +283,34 @@ export async function fetchGearIssues(
               slotName: SLOT_LABELS[slot] ?? `slot ${slot}`,
               seenOnBosses: [],
             });
+          } else {
+            const enchantId = Number(enchantRaw);
+            if (Number.isFinite(enchantId) && enchantId > 0) {
+              const badName = lookupBadEnchant(enchantId, slot);
+              if (badName) {
+                mergeIssue(agg, fight, {
+                  kind: "badEnchant",
+                  itemId,
+                  itemName: `${name} — ${badName}`,
+                  slot,
+                  slotName: SLOT_LABELS[slot] ?? `slot ${slot}`,
+                  seenOnBosses: [],
+                });
+              }
+            }
           }
+        }
+
+        // --- Suboptimal item id (PvP/riding/etc.) ---
+        if (SUBOPTIMAL_ITEM_IDS.has(itemId)) {
+          mergeIssue(agg, fight, {
+            kind: "suboptimalItem",
+            itemId,
+            itemName: name,
+            slot,
+            slotName: SLOT_LABELS[slot] ?? `slot ${slot}`,
+            seenOnBosses: [],
+          });
         }
 
         // --- Gems ---
@@ -293,11 +352,10 @@ export async function fetchGearIssues(
             continue;
           }
 
-          // Gem quality bucketing from GearIssues.gs:757-769.
-          //   itemLevel < 60     → common (#b7b7b7)
-          //   itemLevel == 60    → uncommon  (#bfeeae)
-          //   itemLevel 61–99    → rare      (#a9c2f1)
-          //   itemLevel ≥ 100    → epic (acceptable, no flag)
+          // Gem quality bucketing — only flag uncommon-or-lower per user
+          // preference (rare and epic are acceptable):
+          //   itemLevel < 60   → common   (#b7b7b7)
+          //   itemLevel == 60  → uncommon (#bfeeae)
           if (ilvl < 60) {
             mergeIssue(agg, fight, {
               kind: "commonGem",
@@ -310,15 +368,6 @@ export async function fetchGearIssues(
           } else if (ilvl === 60) {
             mergeIssue(agg, fight, {
               kind: "uncommonGem",
-              itemId,
-              itemName: name,
-              slot,
-              slotName: SLOT_LABELS[slot] ?? `slot ${slot}`,
-              seenOnBosses: [],
-            });
-          } else if (ilvl < 100) {
-            mergeIssue(agg, fight, {
-              kind: "rareGem",
               itemId,
               itemName: name,
               slot,

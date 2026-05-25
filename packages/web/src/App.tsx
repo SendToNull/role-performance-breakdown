@@ -149,7 +149,7 @@ function Generator() {
   const totalCalls = useMemo(() => progress?.totalCompleted ?? 0, [progress]);
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col gap-6 p-6">
+    <div className="mx-auto flex h-full max-w-[1400px] flex-col gap-6 p-6">
       <header className="flex items-baseline justify-between border-b border-zinc-800 pb-3">
         <h1 className="text-2xl font-semibold tracking-tight">
           Role Performance Breakdown

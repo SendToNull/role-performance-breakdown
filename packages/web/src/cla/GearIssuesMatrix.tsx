@@ -132,10 +132,11 @@ function Legend() {
   const kinds: IssueKind[] = [
     "missing",
     "noEnchant",
+    "badEnchant",
+    "suboptimalItem",
     "noGem",
     "commonGem",
     "uncommonGem",
-    "rareGem",
     "metaGemInactive",
   ];
   return (

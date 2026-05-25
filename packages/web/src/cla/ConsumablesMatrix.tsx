@@ -17,12 +17,12 @@ export function ConsumablesMatrix({ result }: Props) {
     <section className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
       <header className="px-1 pt-1">
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-400">
-          Consumables (boss + trash)
+          Consumables (boss fights)
         </h2>
         <p className="mt-0.5 text-xs text-zinc-500">
-          {players.length} players · {result.totalFightCount} combat fights ·
-          each cell shows % of fights the player had the consumable applied
-          (n/m) · empty / red = never used
+          {players.length} players · {result.totalFightCount} boss fights ·
+          each cell shows % of boss fights the player had the consumable
+          applied (n/m) · empty / red = never used
         </p>
       </header>
 

@@ -29,3 +29,66 @@ npm run typecheck    # tsc --noEmit across packages
 ## Deploy (web → GitHub Pages)
 
 Push to `main`; the workflow in `.github/workflows/deploy-pages.yml` builds `packages/web` and publishes the static bundle.
+
+## Run the Discord bot
+
+Full Discord and GitHub portal setup lives in [packages/bot/README.md](packages/bot/README.md). Once you've done that one-time setup, the bot is started from a normal shell — it has to be running for `/rpb` to work in Discord.
+
+### One-time setup
+
+```sh
+# from the repo root
+npm install
+npm run build --workspace=@rpb/core
+npm run build --workspace=@rpb/bot
+```
+
+Create `packages/bot/.env` (this file is gitignored — do not commit it):
+
+```env
+DISCORD_TOKEN=<bot token from the Discord dev portal>
+DISCORD_APP_ID=<application id>
+ALLOWED_GUILD_IDS=<your server id>      # comma-separated; leave empty to allow any guild
+WCL_API_KEY=<your WCL v1 key>
+WEB_BASE_URL=https://<you>.github.io/role-performance-breakdown
+GITHUB_TOKEN=<PAT with only the "gist" scope>
+```
+
+### Register slash commands (first time, and after option changes)
+
+```sh
+node packages/bot/dist/register.js
+```
+
+This pushes the `/rpb` command definition to Discord. Re-run it any time `register.ts` changes.
+
+### Start the bot
+
+```sh
+node packages/bot/dist/index.js
+```
+
+Leave the process running. You should see `Logged in as <bot-name>#<discriminator>` in the console. Now `/rpb report:<url>` in your Discord server will reply with a link to the deployed web app loading the snapshot.
+
+To keep the bot up after you close the terminal, run it under a process manager — examples:
+
+```sh
+# pm2 (https://pm2.keymetrics.io)
+npm install -g pm2
+pm2 start packages/bot/dist/index.js --name rpb-bot
+pm2 save
+pm2 startup        # follow the printed instructions to auto-start on boot
+
+# or, plain Windows: run as a background task
+start /b node packages/bot/dist/index.js
+```
+
+### Update the bot after pulling new changes
+
+```sh
+git pull
+npm install                                 # only if package-lock changed
+npm run build --workspace=@rpb/core
+npm run build --workspace=@rpb/bot
+# restart the process (e.g. `pm2 restart rpb-bot`)
+```

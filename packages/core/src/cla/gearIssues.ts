@@ -23,6 +23,12 @@ import { WCLClient } from "../wcl/client.js";
 import { makeUrls } from "../wcl/endpoints.js";
 import { parseReportInput } from "../wcl/parseReportInput.js";
 import { BAD_ENCHANTS, SUBOPTIMAL_ITEM_IDS } from "./gearIssueData.js";
+import {
+  BLUE_GEMS,
+  META_GEMS,
+  RED_GEMS,
+  YELLOW_GEMS,
+} from "./gemColors.js";
 
 export type IssueKind =
   | "missing"          // no item in this slot
@@ -102,16 +108,40 @@ const COMMON_IGNORED_IDS = new Set<number>([
 ]);
 
 /**
- * Known TBC meta gems that have activation conditions. If a player has one of
- * these slotted but doesn't meet the rune requirements (e.g. need 2 red + 2
- * yellow), it's effectively inactive. The script flags all of them and lets
- * the user inspect; we do the same — exact rune-requirement enforcement is
- * still phase 2.
+ * Returns true if a meta gem's rune requirements are satisfied by the player's
+ * other gems. Ported verbatim from GearIssues.gs:340-364. Counts include
+ * overlap (orange = red+yellow, green = yellow+blue, purple = red+blue) which
+ * is correct — Blizzard counts overlap when activating meta gems.
  */
-const META_GEM_IDS = new Set<number>([
-  25897, 25899, 34220, 25890, 35503, 25895, 35501, 32641, 25901, 25893,
-  25896, 28557, 32409, 25894, 28556, 25898, 32640, 32410,
-]);
+function isMetaGemActive(
+  metaGemId: number,
+  redCount: number,
+  yellowCount: number,
+  blueCount: number,
+): boolean {
+  switch (metaGemId) {
+    case 25896: return blueCount > 2;
+    case 25897: return redCount > blueCount;
+    case 32409:
+    case 25899:
+    case 25901:
+    case 25890:
+    case 32410: return redCount > 1 && blueCount > 1 && yellowCount > 1;
+    case 25898: return blueCount > 4;
+    case 25893:
+    case 32640: return blueCount > yellowCount;
+    case 34220: return blueCount > 1;
+    case 25895: return redCount > yellowCount;
+    case 25894:
+    case 28556:
+    case 28557: return redCount > 0 && yellowCount > 1;
+    case 32641: return yellowCount > 2;
+    case 35503: return redCount > 2;
+    case 35501: return blueCount > 1 && yellowCount > 0;
+    // Unknown meta gems: assume active (don't false-positive flag).
+    default: return true;
+  }
+}
 
 /**
  * Item-id → socket count. Hardcoding common raid items is too brittle; for
@@ -260,6 +290,44 @@ export async function fetchGearIssues(
 
       const slotsSeen = new Set<number>();
 
+      // Pass 1: count red/yellow/blue gems across ALL of this player's gear
+      // at this fight, and record any meta gems found. The activation rules
+      // need fight-scoped totals before we can decide whether each meta gem
+      // is active.
+      let redCount = 0, yellowCount = 0, blueCount = 0;
+      type FoundMeta = {
+        gemId: number;
+        itemId: number;
+        itemName: string;
+        slot: number;
+      };
+      const foundMetas: FoundMeta[] = [];
+      for (const raw of rawGear) {
+        if (typeof raw !== "object" || raw === null) continue;
+        const r = raw as Record<string, unknown>;
+        const itemId = typeof r["id"] === "number" ? r["id"] : 0;
+        if (!itemId) continue;
+        const slot = typeof r["slot"] === "number" ? r["slot"] : -1;
+        const name = typeof r["name"] === "string" ? r["name"] : "(unknown)";
+        const gems = Array.isArray(r["gems"])
+          ? (r["gems"] as Array<Record<string, unknown>>)
+          : [];
+        for (const g of gems) {
+          const gid = typeof g["id"] === "number" ? g["id"] : 0;
+          if (!gid) continue;
+          if (META_GEMS.has(gid)) {
+            foundMetas.push({ gemId: gid, itemId, itemName: name, slot });
+            continue;
+          }
+          if (RED_GEMS.has(gid)) redCount++;
+          if (YELLOW_GEMS.has(gid)) yellowCount++;
+          if (BLUE_GEMS.has(gid)) blueCount++;
+        }
+      }
+
+      // Pass 2: walk gear again to emit per-item issues (enchants, gem quality,
+      // missing items). Meta gem activation is evaluated below using the
+      // fight-scoped counts from pass 1.
       for (const raw of rawGear) {
         if (typeof raw !== "object" || raw === null) continue;
         const r = raw as Record<string, unknown>;
@@ -339,18 +407,9 @@ export async function fetchGearIssues(
           const gid = typeof g["id"] === "number" ? g["id"] : 0;
           const ilvl = typeof g["itemLevel"] === "number" ? g["itemLevel"] : 0;
           if (!gid || !ilvl) continue;
-
-          if (META_GEM_IDS.has(gid)) {
-            mergeIssue(agg, fight, {
-              kind: "metaGemInactive",
-              itemId,
-              itemName: name,
-              slot,
-              slotName: SLOT_LABELS[slot] ?? `slot ${slot}`,
-              seenOnBosses: [],
-            });
-            continue;
-          }
+          // Meta gems are evaluated after this loop using fight-scoped
+          // red/yellow/blue counts — skip them here.
+          if (META_GEMS.has(gid)) continue;
 
           // Gem quality bucketing — only flag uncommon-or-lower per user
           // preference (rare and epic are acceptable):
@@ -376,6 +435,19 @@ export async function fetchGearIssues(
             });
           }
         }
+      }
+
+      // --- Meta gem activation, evaluated with fight-scoped counts ---
+      for (const m of foundMetas) {
+        if (isMetaGemActive(m.gemId, redCount, yellowCount, blueCount)) continue;
+        mergeIssue(agg, fight, {
+          kind: "metaGemInactive",
+          itemId: m.itemId,
+          itemName: m.itemName,
+          slot: m.slot,
+          slotName: SLOT_LABELS[m.slot] ?? `slot ${m.slot}`,
+          seenOnBosses: [],
+        });
       }
 
       // --- Missing items in required slots (only flag once we've seen this

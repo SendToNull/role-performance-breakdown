@@ -1,11 +1,19 @@
 # @rpb/bot
 
-Discord bot that exposes `/rpb <report-url>`. On invocation it:
+Discord bot that exposes three slash commands:
 
-1. Runs the report through `@rpb/core` (same code path as the web app).
-2. Builds a snapshot of the matrix.
-3. Uploads the snapshot to a **private GitHub gist** (URL never expires).
-4. Replies with a link to the deployed web app loading that snapshot — anyone in the channel can open the full table without needing a WCL key.
+| Command | What it runs | When to use |
+| --- | --- | --- |
+| `/rpb report:<url>` | Role Performance Breakdown only | Cast/buff/cooldown analysis |
+| `/cla report:<url>` | Combat Log Analytics only (gear issues + consumables) | Quick gear/consumable audit |
+| `/full report:<url>` | Both, in one snapshot | Share a single link that opens to RPB by default, with a tab to switch to Gear Issues / Consumables |
+
+On invocation each command:
+
+1. Runs the requested section(s) through `@rpb/core` (same code path as the web app).
+2. Builds a bundle snapshot.
+3. Uploads it to a **private GitHub gist** (URL never expires).
+4. Replies with a link to the deployed web app loading that snapshot — anyone in the channel can open it without needing a WCL key.
 
 ## Required environment
 
@@ -54,9 +62,14 @@ In a channel where the bot is allowed:
 ```
 /rpb report:https://classic.warcraftlogs.com/reports/AbCdEf...
 /rpb report:AbCdEf123 mode:all no-wipes:true
+/cla report:AbCdEf123
+/full report:AbCdEf123
+/full report:AbCdEf123 mode:onlyBosses no-wipes:true
 ```
 
-The bot replies with a link to the web app. Click it to see the full role-performance breakdown.
+The bot replies with a link to the web app. `/rpb` opens to the Role Performance matrix, `/cla` opens to Gear Issues with a Consumables tab, and `/full` opens to RPB with tabs for both Gear Issues and Consumables.
+
+Re-run `node packages/bot/dist/register.js` after pulling new bot code — that's what tells Discord the new `/cla` and `/full` commands exist.
 
 ## Privacy summary
 

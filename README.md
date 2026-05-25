@@ -68,7 +68,13 @@ This pushes the `/rpb` command definition to Discord. Re-run it any time `regist
 node packages/bot/dist/index.js
 ```
 
-Leave the process running. You should see `Logged in as <bot-name>#<discriminator>` in the console. Now `/rpb report:<url>` in your Discord server will reply with a link to the deployed web app loading the snapshot.
+Leave the process running. You should see `Logged in as <bot-name>#<discriminator>` in the console. In Discord:
+
+- `/rpb report:<url>` — Role Performance matrix only.
+- `/cla report:<url>` — Combat Log Analytics (gear issues + consumables).
+- `/full report:<url>` — both in one snapshot. The shared link opens to RPB by default with tabs to flip to Gear Issues / Consumables.
+
+`/rpb` and `/full` also accept `mode:` (all / onlyBosses / onlyTrash) and `no-wipes:`. `/cla` ignores those — it always scans every boss fight in the report.
 
 To keep the bot up after you close the terminal, run it under a process manager — examples:
 

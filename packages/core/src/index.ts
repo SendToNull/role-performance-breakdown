@@ -15,3 +15,4 @@ export * from "./matrix/buildMatrix.js";
 export * from "./matrix/snapshotBuilder.js";
 export * from "./cla/gearIssues.js";
 export * from "./cla/consumables.js";
+export * from "./cla/bundle.js";

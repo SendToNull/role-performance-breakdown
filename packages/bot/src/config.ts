@@ -1,10 +1,22 @@
 // All env config in one place — no magic strings sprinkled through handlers.
 
+import { existsSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import * as dotenv from "dotenv";
 
-// `override: true` so a stale DISCORD_TOKEN from another bot in the user's
-// shell environment doesn't shadow ours.
-dotenv.config({ override: true });
+// Resolve packages/bot/.env relative to this module so the bot works no
+// matter the cwd it was launched from (repo root, packages/bot, etc.).
+// Falls back to the cwd default if a per-package .env doesn't exist.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const packageEnv = resolve(__dirname, "..", ".env");
+if (existsSync(packageEnv)) {
+  // `override: true` so a stale DISCORD_TOKEN from another bot in the user's
+  // shell environment doesn't shadow ours.
+  dotenv.config({ path: packageEnv, override: true });
+} else {
+  dotenv.config({ override: true });
+}
 
 export interface BotConfig {
   discordToken: string;

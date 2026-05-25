@@ -31,7 +31,7 @@ export interface PlayerConsumablesJson {
 export interface ConsumablesPayload {
   logId: string;
   title?: string;
-  totalBossTimeMs: number;
+  totalCombatTimeMs: number;
   players: PlayerConsumablesJson[];
 }
 
@@ -89,7 +89,7 @@ export function serializeConsumables(r: ConsumablesResult): ConsumablesPayload {
   return {
     logId: r.logId,
     ...(r.title !== undefined ? { title: r.title } : {}),
-    totalBossTimeMs: r.totalBossTimeMs,
+    totalCombatTimeMs: r.totalCombatTimeMs,
     players: r.players.map((p) => ({
       id: p.id,
       name: p.name,
@@ -117,7 +117,7 @@ export function deserializeConsumables(p: ConsumablesPayload): ConsumablesResult
   return {
     logId: p.logId,
     ...(p.title !== undefined ? { title: p.title } : {}),
-    totalBossTimeMs: p.totalBossTimeMs,
+    totalCombatTimeMs: p.totalCombatTimeMs,
     players: p.players.map<PlayerConsumables>((pl) => ({
       id: pl.id,
       name: pl.name,

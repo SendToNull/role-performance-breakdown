@@ -17,10 +17,10 @@ export function ConsumablesMatrix({ result }: Props) {
     <section className="grid gap-3 rounded-lg border border-zinc-800 bg-zinc-900/40 p-3">
       <header className="px-1 pt-1">
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-400">
-          Consumables (on-boss)
+          Consumables (in combat)
         </h2>
         <p className="mt-0.5 text-xs text-zinc-500">
-          {players.length} players · per-category buff usage during boss
+          {players.length} players · per-category buff usage during boss + trash
           fights · empty / red = not used, green = used
         </p>
       </header>
@@ -45,7 +45,7 @@ export function ConsumablesMatrix({ result }: Props) {
           </thead>
           <tbody>
             {players.map((p) => (
-              <PlayerRow key={p.id} player={p} totalMs={result.totalBossTimeMs} />
+              <PlayerRow key={p.id} player={p} totalMs={result.totalCombatTimeMs} />
             ))}
           </tbody>
         </table>
@@ -79,7 +79,7 @@ function PlayerRow({
               key={cat.id}
               className="min-w-[100px] border-r border-zinc-800/60 px-1 py-1 text-center"
               style={{ backgroundColor: "rgba(255, 7, 7, 0.18)" }}
-              title={`${cat.label}: never applied during boss fights`}
+              title={`${cat.label}: never applied during combat`}
             >
               <span className="text-red-300">—</span>
             </td>

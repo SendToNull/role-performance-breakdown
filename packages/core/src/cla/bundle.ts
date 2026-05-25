@@ -25,13 +25,14 @@ export interface PlayerConsumablesJson {
   id: number;
   name: string;
   type: string;
+  playerFightCount: number;
   byCategory: Array<[string, ConsumableUse]>;
 }
 
 export interface ConsumablesPayload {
   logId: string;
   title?: string;
-  totalCombatTimeMs: number;
+  totalFightCount: number;
   players: PlayerConsumablesJson[];
 }
 
@@ -89,11 +90,12 @@ export function serializeConsumables(r: ConsumablesResult): ConsumablesPayload {
   return {
     logId: r.logId,
     ...(r.title !== undefined ? { title: r.title } : {}),
-    totalCombatTimeMs: r.totalCombatTimeMs,
+    totalFightCount: r.totalFightCount,
     players: r.players.map((p) => ({
       id: p.id,
       name: p.name,
       type: p.type,
+      playerFightCount: p.playerFightCount,
       byCategory: [...p.byCategory.entries()],
     })),
   };
@@ -117,11 +119,12 @@ export function deserializeConsumables(p: ConsumablesPayload): ConsumablesResult
   return {
     logId: p.logId,
     ...(p.title !== undefined ? { title: p.title } : {}),
-    totalCombatTimeMs: p.totalCombatTimeMs,
+    totalFightCount: p.totalFightCount,
     players: p.players.map<PlayerConsumables>((pl) => ({
       id: pl.id,
       name: pl.name,
       type: pl.type,
+      playerFightCount: pl.playerFightCount,
       byCategory: new Map<string, ConsumableUse>(pl.byCategory),
     })),
   };

@@ -1,18 +1,25 @@
 // Combat Log Analytics — Consumables.
-// Ports the per-player consumable buff tracking from Consumables.gs.
+// Ports the per-player consumable tracking from Consumables.gs.
 //
-// Strategy: one /report/tables/buffs?targetid=X call per player covering the
-// full report. We then clip each aura's bands to the union of fight intervals
-// (boss + trash) so the uptime% denominator is real in-combat time rather
-// than wall-clock time. We cross-reference each aura against curated TBC
-// consumable categories (flask, food, battle elixir, guardian elixir, weapon
-// oil/stone, scroll, drum). Each cell is either:
-//   - empty / red: consumable not used in any fight
-//   - green: consumable used (with use count and in-combat uptime%)
+// Algorithm (matches the source script exactly):
+//   For each player and each category:
+//     bossIdsFound = fights where ANY aura with a matching spell id had at
+//                    least one band overlapping the fight
+//     playerFightCount = fights where the player had any aura at all (proxy
+//                        for "player participated in this fight")
+//     percentage = round(bossIdsFound / playerFightCount * 100)
 //
-// Spell-id fallback: if an aura's id isn't in any curated list, we try to
-// categorize by name pattern (e.g. "Elixir of *" → battle elixir, "Flask of *"
-// → flask). This catches niche or new ranks the curated list missed.
+// Mutual exclusion: a player can have either a flask OR (battle elixir +
+// guardian elixir). If battle/guardian was found on a fight, that fight is
+// excluded from the flask count for that player — same as Consumables.gs:272.
+//
+// Default scope: boss + trash (any fight with positive duration). The source
+// only looked at boss fights, but the user wants trash included so flasks /
+// elixirs applied before the first boss show up.
+//
+// We make exactly ONE buffs query per player covering the whole report
+// (no &encounter=). The per-fight participation check is done client-side
+// by intersecting aura bands with fight intervals — no per-fight queries.
 
 import type { FightsResponse, TableResponse } from "../types/index.js";
 import { WCLClient } from "../wcl/client.js";
@@ -29,13 +36,51 @@ export interface ConsumableCategory {
 }
 
 /**
- * TBC consumable buff IDs, curated from SimC TBC data + WCL aura logs. Where
- * an elixir spans both worlds (e.g. Elixir of Major Mageblood is technically
- * Guardian in TBC even though it's a stat boost), we follow Blizzard's
- * official category. The name-pattern fallback in `aggregate()` catches any
- * id we missed.
+ * Categories iterate in this order. Source script requires Battle + Guardian
+ * to be checked BEFORE Flask so the flask-exclusion logic works correctly
+ * (a fight with battle/guardian doesn't count toward flask uptime).
  */
 export const CONSUMABLE_CATEGORIES: ConsumableCategory[] = [
+  {
+    id: "battleElixir",
+    label: "Battle Elixir",
+    description: "Damage-focused elixir. Mutually exclusive with flask + guardian.",
+    spellIds: [
+      // TBC battle elixirs
+      28491, // Adept's Elixir (sp + spell crit)
+      28493, // Elixir of Major Shadow Power
+      28497, // Elixir of Major Strength
+      28501, // Elixir of Major Frost Power
+      28503, // Elixir of Major Firepower
+      33077, // Elixir of Empowerment (spell penetration)
+      33726, // Elixir of Mastery (all stats)
+      45373, // Elixir of Major Agility (crit + dodge)
+      54452, // Adept's Elixir (alt rank)
+      // Pre-TBC battle elixirs still legal in TBC
+      11406, // Elixir of Demonslaying
+      17537, // Elixir of Brute Force
+      17538, // Elixir of the Mongoose
+      17539, // Greater Arcane Elixir
+      22817, // Elixir of Frost Power
+      22818, // Elixir of Greater Firepower
+      24361, // Elixir of Greater Agility
+    ],
+  },
+  {
+    id: "guardianElixir",
+    label: "Guardian Elixir",
+    description: "Defensive elixir. Mutually exclusive with flask + battle.",
+    spellIds: [
+      // TBC guardian elixirs
+      28502, // Elixir of Major Defense (550 armor)
+      28509, // Elixir of Major Mageblood (16 mp5)
+      39625, // Elixir of Major Fortitude (250 HP, 10 hp5)
+      39626, // Earthen Elixir (caster armor)
+      // Pre-TBC guardian elixirs
+      22833, // Elixir of Greater Defense
+      11334, // Elixir of the Sages
+    ],
+  },
   {
     id: "flask",
     label: "Flask",
@@ -48,53 +93,13 @@ export const CONSUMABLE_CATEGORIES: ConsumableCategory[] = [
       28521, // Flask of Mighty Restoration
       28540, // Flask of Pure Death
       41608, // Flask of Chromatic Wonder
-      // Shattrath flasks (raid-only, double-strength)
+      // Shattrath (raid-only, double-strength) flasks
       42735, 42736, 42737, 42738, 42739,
-      // Vanilla flasks (still usable in TBC)
+      // Vanilla flasks still legal in TBC
       17626, // Flask of the Titans
       17627, // Flask of Distilled Wisdom
       17628, // Flask of Supreme Power
       17629, // Flask of Chromatic Resistance
-    ],
-  },
-  {
-    id: "battleElixir",
-    label: "Battle Elixir",
-    description: "Damage-focused elixir. Mutually exclusive with Flask + Guardian.",
-    spellIds: [
-      // TBC
-      28491, // Adept's Elixir (sp + spell crit)
-      28493, // Elixir of Major Shadow Power
-      28497, // Elixir of Major Strength
-      28501, // Elixir of Major Frost Power
-      28503, // Elixir of Major Firepower
-      33077, // Elixir of Empowerment (spell penetration)
-      33726, // Elixir of Mastery
-      45373, // Elixir of Major Agility (TBC, raises crit too)
-      54452, // Adept's Elixir (alt rank)
-      // Pre-TBC battle elixirs that still work
-      11406, // Elixir of Demonslaying
-      17537, // Elixir of Brute Force
-      17538, // Elixir of the Mongoose
-      17539, // Greater Arcane Elixir
-      22817, // Elixir of Frost Power
-      22818, // Elixir of Greater Firepower
-      24361, // Elixir of Greater Agility (Wrath BC ports)
-    ],
-  },
-  {
-    id: "guardianElixir",
-    label: "Guardian Elixir",
-    description: "Defensive elixir. Mutually exclusive with Flask + Battle.",
-    spellIds: [
-      // TBC
-      28502, // Elixir of Major Defense
-      28509, // Elixir of Major Mageblood (mp5 — Guardian in TBC)
-      39625, // Elixir of Major Fortitude
-      39626, // Earthen Elixir (caster armor)
-      // Vanilla
-      22833, // Elixir of Greater Defense
-      11334, // Elixir of the Sages (BC era spirit)
     ],
   },
   {
@@ -115,12 +120,8 @@ export const CONSUMABLE_CATEGORIES: ConsumableCategory[] = [
       40539, // Blackened Basilisk
       40543, // Spicy Crawdad
       40745, // Fisherman's Feast
-      // TBC misc food
       18192, // Grilled Squid (vanilla, still works)
       24799, // Smoked Desert Dumpling
-      // Wrath ports (just in case logs include them)
-      43764, // Spiced Mammoth Treats
-      46899, 46898, 46897, 46896, 46895, 46894,
     ],
   },
   {
@@ -128,7 +129,6 @@ export const CONSUMABLE_CATEGORIES: ConsumableCategory[] = [
     label: "Weapon oil / stone",
     description: "Superior Wizard Oil, Adamantite Sharpening Stone, etc.",
     spellIds: [
-      // TBC oils & stones
       28013, // Superior Wizard Oil
       28019, // Brilliant Wizard Oil
       28017, // Superior Mana Oil
@@ -136,12 +136,9 @@ export const CONSUMABLE_CATEGORIES: ConsumableCategory[] = [
       29453, // Adamantite Sharpening Stone
       29452, // Adamantite Weightstone
       28583, // Adamantite Sharpening Stone (alt id)
-      // Lower-tier (still better than nothing — keeps the column accurate)
       20749, // Brilliant Mana Oil
       20748, // Brilliant Wizard Oil
       20747, // Lesser Mana Oil
-      22756, // Sharpen Blade V
-      22757, // Enchant Weapon — Mongoose? actually...
     ],
   },
   {
@@ -149,8 +146,6 @@ export const CONSUMABLE_CATEGORIES: ConsumableCategory[] = [
     label: "Scroll (stat)",
     description: "Cheaper temporary stat boost. Below the 'good' tier.",
     spellIds: [
-      33077, // Scroll/Elixir overlap — handled in fallback
-      // Actual TBC Scroll V spells
       33093, // Scroll of Strength V
       33092, // Scroll of Stamina V
       33078, // Scroll of Agility V
@@ -169,44 +164,41 @@ export const CONSUMABLE_CATEGORIES: ConsumableCategory[] = [
       35478, // Drums of Restoration
       35477, // Drums of Speed
       35475, // Drums of War
-      // Wrath versions
-      351355, 351358, 351359, 351360, 351766, 351768, 351769, 351771,
     ],
   },
 ];
 
-const KNOWN_SPELL_IDS = new Set<number>(
-  CONSUMABLE_CATEGORIES.flatMap((c) => c.spellIds),
-);
+const idToCategory = new Map<number, string>();
+for (const cat of CONSUMABLE_CATEGORIES) {
+  for (const id of cat.spellIds) idToCategory.set(id, cat.id);
+}
 
 /**
- * Name-pattern fallback for auras whose spell id isn't in any curated list.
- * Returns the category id to bucket the aura into, or null to ignore it.
- * Patterns are deliberately narrow — we'd rather miss an obscure consumable
- * than misclassify a class buff as one.
+ * Name-pattern fallback for auras whose spell id isn't curated. Returns the
+ * category id, or null to ignore.
+ *
+ * Order matters: Guardian-specific elixir names must match before the
+ * generic "Elixir of *" rule so Major Defense / Mageblood / Fortitude etc.
+ * don't fall into Battle by mistake.
  */
 function categorizeByName(name: string): string | null {
-  // Drum names are distinctive and short.
   if (/^Drums? of /i.test(name)) return "drum";
-  // Flasks always start with "Flask of".
   if (/^Flask of /i.test(name)) return "flask";
-  // Scrolls.
   if (/^Scroll of /i.test(name)) return "scroll";
-  // Weapon enhancements: oils / sharpening / weightstones.
-  if (/(Wizard Oil|Mana Oil|Sharpening Stone|Weightstone|Windfury Totem)/i.test(name)) {
-    // Windfury Totem accidental match is a class buff, exclude.
-    if (/Windfury/i.test(name)) return null;
+  if (/^Well Fed$/i.test(name)) return "food";
+  if (/(Wizard Oil|Mana Oil|Sharpening Stone|Weightstone)/i.test(name)) {
     return "weaponEnhance";
   }
-  // Well Fed always uses the literal aura name "Well Fed" in WCL, or fish names.
-  if (/^Well Fed$/i.test(name)) return "food";
-  // Guardian elixirs we know about by name. Order matters: check Guardian
-  // before Battle so "Elixir of Major Defense" gets classified correctly.
-  if (/^Elixir of (Major Defense|Major Mageblood|Major Fortitude|Greater Defense|the Sages|Empowerment)$/i.test(name)) {
+  // Guardian elixirs — named explicitly so they don't fall into Battle.
+  if (
+    /^Elixir of (Major Defense|Major Mageblood|Major Fortitude|Greater Defense|the Sages)$/i.test(
+      name,
+    )
+  ) {
     return "guardianElixir";
   }
   if (/^Earthen Elixir$/i.test(name)) return "guardianElixir";
-  // Anything else matching elixir naming → battle elixir bucket.
+  // Generic elixir → battle bucket.
   if (/^(Elixir of |Adept's Elixir|Greater Arcane Elixir)/i.test(name)) {
     return "battleElixir";
   }
@@ -216,11 +208,9 @@ function categorizeByName(name: string): string | null {
 export interface ConsumableUse {
   /** Category id. */
   category: string;
-  /** Number of distinct aura applications (bands intersecting any fight). */
-  count: number;
-  /** ms uptime, clipped to in-combat intervals (boss + trash). */
-  uptimeMs: number;
-  /** Spell id that produced the most uptime (for tooltip). */
+  /** Number of fights where this category's consumable was active. */
+  fightsWithUsage: number;
+  /** Best (most-frequent) spell id within the category, for tooltip. */
   bestSpellId?: number;
   bestSpellName?: string;
 }
@@ -229,15 +219,17 @@ export interface PlayerConsumables {
   id: number;
   name: string;
   type: string;
-  /** Category id → use info. Missing keys mean not used. */
+  /** Combat fights this player participated in. Denominator for every category. */
+  playerFightCount: number;
+  /** Category id → use info. Missing keys mean not used in any fight. */
   byCategory: Map<string, ConsumableUse>;
 }
 
 export interface ConsumablesResult {
   logId: string;
   title?: string;
-  /** Total ms across all combat intervals (boss + trash, duration > 0). */
-  totalCombatTimeMs: number;
+  /** Combat fights inspected (boss + trash, duration > 0). */
+  totalFightCount: number;
   players: PlayerConsumables[];
 }
 
@@ -259,7 +251,7 @@ export async function fetchConsumables(
     apiKey: input.apiKey,
   });
   // mode "all" = no `&encounter=` filter → WCL returns auras across the whole
-  // report (boss + trash + idle). We clip to fight intervals client-side.
+  // report (boss + trash + idle). We then bucket band overlaps to fights.
   const endpoints = makeUrls({
     lang: "EN",
     apiKey: input.apiKey,
@@ -269,17 +261,9 @@ export async function fetchConsumables(
   });
 
   const fightsRaw = await client.getJson<FightsResponse>(endpoints.fights);
-  // Combat = any fight with positive duration, regardless of boss flag. This
-  // includes trash, bosses, and wipes — anything the raid was actually
-  // fighting through.
-  const combatIntervals = mergeIntervals(
-    fightsRaw.fights
-      .filter((f) => f.end_time > f.start_time)
-      .map((f) => [f.start_time, f.end_time] as [number, number]),
-  );
-  const totalCombatTimeMs = combatIntervals.reduce(
-    (acc, [s, e]) => acc + (e - s),
-    0,
+  // Combat fights = any fight with positive duration (boss + trash + wipes).
+  const combatFights = fightsRaw.fights.filter(
+    (f) => f.end_time > f.start_time,
   );
 
   const peopleData = await client.getJson<TableResponse>(
@@ -289,20 +273,12 @@ export async function fetchConsumables(
     (e) => (e.total ?? 0) > 20,
   );
 
-  // For each player, one buffs?targetid=X call. No encounter filter — we want
-  // the bands across the whole report so we can clip to combat client-side.
   const baseBuffsUrl = endpoints.buffsTotalPrefix; // ends with &targetid=
   const playerResults = await Promise.all(
     players.map(async (p) => {
       const url = baseBuffsUrl + p.id;
       const data = await client.getJson<TableResponse>(url);
-      const byCategory = aggregate(data, combatIntervals);
-      return {
-        id: p.id,
-        name: p.name,
-        type: p.type,
-        byCategory,
-      };
+      return computePlayerConsumables(p, data, combatFights);
     }),
   );
 
@@ -315,121 +291,128 @@ export async function fetchConsumables(
   return {
     logId: parsed.logId,
     ...(fightsRaw.title ? { title: fightsRaw.title } : {}),
-    totalCombatTimeMs,
+    totalFightCount: combatFights.length,
     players: playerResults,
   };
 }
 
-/**
- * Sort intervals by start time and merge overlapping ones so we can clip
- * aura bands against a clean union.
- */
-function mergeIntervals(
-  raw: Array<[number, number]>,
-): Array<[number, number]> {
-  if (raw.length === 0) return [];
-  const sorted = [...raw].sort((a, b) => a[0] - b[0]);
-  const out: Array<[number, number]> = [sorted[0]!];
-  for (let i = 1; i < sorted.length; i++) {
-    const cur = sorted[i]!;
-    const last = out[out.length - 1]!;
-    if (cur[0] <= last[1]) {
-      last[1] = Math.max(last[1], cur[1]);
-    } else {
-      out.push(cur);
-    }
-  }
-  return out;
-}
+type Fight = { id: number; start_time: number; end_time: number };
 
-/**
- * Returns the total duration of [s, e] clipped to the union of `intervals`.
- * Assumes intervals are sorted and non-overlapping (from mergeIntervals).
- */
-function clipToIntervals(
-  s: number,
-  e: number,
-  intervals: Array<[number, number]>,
-): number {
-  let total = 0;
-  for (const [is, ie] of intervals) {
-    if (ie <= s) continue;
-    if (is >= e) break;
-    total += Math.min(e, ie) - Math.max(s, is);
-  }
-  return total;
-}
-
-function aggregate(
+function computePlayerConsumables(
+  player: { id: number; name: string; type: string },
   data: TableResponse,
-  combatIntervals: Array<[number, number]>,
-): Map<string, ConsumableUse> {
-  // Bucket each aura into a category (curated id first, name pattern fallback).
-  type Bucket = {
-    count: number;
-    uptimeMs: number;
-    bestSpellId?: number;
-    bestSpellName?: string;
-    bestUptime: number;
-  };
-  const buckets = new Map<string, Bucket>();
-  const ensure = (cat: string): Bucket => {
-    let b = buckets.get(cat);
-    if (!b) {
-      b = { count: 0, uptimeMs: 0, bestUptime: 0 };
-      buckets.set(cat, b);
-    }
-    return b;
-  };
-  const idToCategory = new Map<number, string>();
-  for (const cat of CONSUMABLE_CATEGORIES) {
-    for (const id of cat.spellIds) idToCategory.set(id, cat.id);
-  }
+  combatFights: Fight[],
+): PlayerConsumables {
+  const auras = data.auras ?? [];
 
-  for (const aura of data.auras ?? []) {
-    if (!aura.guid) continue;
-    let cat = idToCategory.get(aura.guid);
-    if (!cat) {
-      const byName = categorizeByName(aura.name ?? "");
-      if (!byName) continue;
-      cat = byName;
-    }
-    // Sum in-combat uptime by clipping each band to combat intervals.
-    const bands = aura.bands ?? [];
-    let inCombatUptime = 0;
-    let inCombatCount = 0;
-    for (const band of bands) {
-      const bs = band.startTime;
-      const be = band.endTime;
-      if (be <= bs) continue;
-      const overlap = clipToIntervals(bs, be, combatIntervals);
-      if (overlap > 0) {
-        inCombatUptime += overlap;
-        inCombatCount++;
+  // ---- Determine which fights the player participated in ----
+  // A player "participated" in a fight if they have ANY aura with a band
+  // overlapping the fight. Same proxy the source uses (it checks "any aura
+  // applied during this fight" — line Consumables.gs:250-254).
+  const participatedFightIds = new Set<number>();
+  for (const fight of combatFights) {
+    for (const aura of auras) {
+      if (anyBandOverlaps(aura.bands ?? [], fight.start_time, fight.end_time)) {
+        participatedFightIds.add(fight.id);
+        break;
       }
     }
-    if (inCombatUptime === 0 && inCombatCount === 0) continue;
+  }
+  const playerFightCount = participatedFightIds.size;
 
-    const b = ensure(cat);
-    b.count += inCombatCount;
-    b.uptimeMs += inCombatUptime;
-    if (inCombatUptime > b.bestUptime) {
-      b.bestUptime = inCombatUptime;
-      b.bestSpellId = aura.guid;
-      b.bestSpellName = aura.name;
+  // ---- For each fight, determine which categories were active ----
+  // We bucket each aura into a category (curated id first, name fallback),
+  // then for each fight check whether any aura in that category had a band
+  // overlapping. This mirrors the source's nested-loop logic but in O(fights
+  // * auras) instead of needing N×M API calls.
+  type FightCategoryHit = { categoryId: string; spellId: number; spellName: string };
+  // category id -> Map<fight id, hit>
+  const hitsByCategory = new Map<string, Map<number, FightCategoryHit>>();
+  for (const cat of CONSUMABLE_CATEGORIES) hitsByCategory.set(cat.id, new Map());
+
+  for (const aura of auras) {
+    if (!aura.guid) continue;
+    const cat = idToCategory.get(aura.guid) ?? categorizeByName(aura.name ?? "");
+    if (!cat) continue;
+    const bucket = hitsByCategory.get(cat);
+    if (!bucket) continue;
+    for (const fight of combatFights) {
+      if (!participatedFightIds.has(fight.id)) continue;
+      if (anyBandOverlaps(aura.bands ?? [], fight.start_time, fight.end_time)) {
+        if (!bucket.has(fight.id)) {
+          bucket.set(fight.id, {
+            categoryId: cat,
+            spellId: aura.guid,
+            spellName: aura.name ?? `spell ${aura.guid}`,
+          });
+        }
+      }
     }
   }
 
-  const out = new Map<string, ConsumableUse>();
-  for (const [cat, b] of buckets) {
-    const use: ConsumableUse = {
-      category: cat,
-      count: b.count,
-      uptimeMs: b.uptimeMs,
-    };
-    if (b.bestSpellId !== undefined) use.bestSpellId = b.bestSpellId;
-    if (b.bestSpellName !== undefined) use.bestSpellName = b.bestSpellName;
-    out.set(cat, use);
+  // ---- Apply flask vs (battle|guardian) mutual exclusion ----
+  // Source Consumables.gs:272 + 289-290: if a fight has battle OR guardian
+  // elixir, that fight is removed from the flask count (you can't have both).
+  const flaskBucket = hitsByCategory.get("flask");
+  const battleBucket = hitsByCategory.get("battleElixir");
+  const guardianBucket = hitsByCategory.get("guardianElixir");
+  if (flaskBucket && (battleBucket || guardianBucket)) {
+    for (const fightId of [...flaskBucket.keys()]) {
+      if (battleBucket?.has(fightId) || guardianBucket?.has(fightId)) {
+        flaskBucket.delete(fightId);
+      }
+    }
   }
-  return out;
+
+  // ---- Compute per-category use info ----
+  const byCategory = new Map<string, ConsumableUse>();
+  for (const cat of CONSUMABLE_CATEGORIES) {
+    const bucket = hitsByCategory.get(cat.id);
+    if (!bucket || bucket.size === 0) continue;
+    // Pick the spell that appeared in the most fights as the "best" / display
+    // name for the tooltip.
+    const perSpell = new Map<number, { count: number; name: string }>();
+    for (const hit of bucket.values()) {
+      const prev = perSpell.get(hit.spellId);
+      if (prev) prev.count++;
+      else perSpell.set(hit.spellId, { count: 1, name: hit.spellName });
+    }
+    let bestSpellId: number | undefined;
+    let bestSpellName: string | undefined;
+    let bestCount = 0;
+    for (const [sid, info] of perSpell) {
+      if (info.count > bestCount) {
+        bestCount = info.count;
+        bestSpellId = sid;
+        bestSpellName = info.name;
+      }
+    }
+    const use: ConsumableUse = {
+      category: cat.id,
+      fightsWithUsage: bucket.size,
+    };
+    if (bestSpellId !== undefined) use.bestSpellId = bestSpellId;
+    if (bestSpellName !== undefined) use.bestSpellName = bestSpellName;
+    byCategory.set(cat.id, use);
+  }
+
+  return {
+    id: player.id,
+    name: player.name,
+    type: player.type,
+    playerFightCount,
+    byCategory,
+  };
+}
+
+/** True if any band [bs, be] overlaps [s, e]. */
+function anyBandOverlaps(
+  bands: Array<{ startTime: number; endTime: number }>,
+  s: number,
+  e: number,
+): boolean {
+  for (const b of bands) {
+    if (b.startTime < e && b.endTime > s) return true;
+  }
+  return false;
 }

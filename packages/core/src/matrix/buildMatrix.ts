@@ -83,15 +83,27 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
     },
   });
 
-  // Total (partly) avoidable damage taken — sum of all damageTaken section
-  // rows + reflected + hostile-players + friendly-fire per player. Matches
-  // source's accumulating `totalAmount` at RPB.gs:3856-3884.
+  // Total (partly) avoidable damage taken — sum of the tracked damageTaken
+  // section rows + reflected + hostile-players + friendly-fire per player.
+  // Mirrors source's accumulator at RPB.gs:3740-3884: only entries whose
+  // guid matches one of the spell ids inside a damageTaken row count toward
+  // totalAmount, NOT the whole damageTakenTotal response.
+  const trackedDamageTakenIds = (() => {
+    const set = new Set<number>();
+    for (const section of TRACKED_SECTIONS) {
+      if (section.section !== "damageTaken") continue;
+      for (const row of section.rows) {
+        for (const sid of row.spellIds) set.add(sid);
+      }
+    }
+    return set;
+  })();
   items.push({
     kind: "row",
     id: "total-avoidable-damage",
     label: "Total (partly) avoidable damage taken",
     description:
-      "Sum of all tracked damage-taken abilities + reflected self-damage + damage taken from hostile players + friendly fire.",
+      "Sum of tracked damage-taken abilities + reflected self-damage + damage taken from hostile players + friendly fire. Matches source RPB.gs:3740-3884.",
     category: "damageTaken",
     pending: !perPlayer,
     cell: (id) => {
@@ -99,12 +111,18 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
       if (!pp) return formatNumeric((reflected.get(id) ?? 0) + (hostiles.get(id) ?? 0));
       let sum = 0;
       for (const entry of pp.damageTakenTotal.entries ?? []) {
+        const guid = (entry.guid ?? entry.id) as number;
+        if (!trackedDamageTakenIds.has(guid)) continue;
         sum += (entry.total ?? 0) as number;
       }
-      sum += reflected.get(id) ?? 0;
-      sum += hostiles.get(id) ?? 0;
-      const ff = (pp as { friendlyFire?: number }).friendlyFire ?? 0;
-      sum += ff;
+      // Source only adds these when > 0 (RPB.gs:3799, 3844, 3856). For our
+      // sum the check is moot but kept explicit for parity with source.
+      const r = reflected.get(id) ?? 0;
+      if (r > 0) sum += r;
+      const h = hostiles.get(id) ?? 0;
+      if (h > 0) sum += h;
+      const ff = pp.friendlyFire ?? 0;
+      if (ff > 0) sum += ff;
       return formatNumeric(sum);
     },
   });

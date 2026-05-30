@@ -78,6 +78,13 @@ export function ClaApp() {
 
   return (
     <div className="mx-auto flex h-full max-w-[1400px] flex-col gap-6 p-6">
+      <header className="flex items-baseline justify-between border-b border-zinc-800 pb-3">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Combat Log Analytics
+        </h1>
+        <span className="text-xs text-zinc-500">WCL v1 • Classic TBC</span>
+      </header>
+
       <section className="grid gap-4 rounded-lg border border-zinc-800 bg-zinc-900/40 p-5">
         <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-400">
           WarcraftLogs credentials
@@ -93,6 +100,20 @@ export function ClaApp() {
             placeholder="Paste your V1 client key"
             className="rounded-md border border-zinc-800 bg-zinc-950 px-3 py-2 font-mono text-sm focus:border-violet-500 focus:outline-none"
           />
+          <span className="text-[11px] text-zinc-500">
+            Stored in your browser only. Calls go directly from this page to
+            <code className="mx-1 rounded bg-zinc-800 px-1">*.warcraftlogs.com</code>.
+            Get a key from{" "}
+            <a
+              href="https://classic.warcraftlogs.com/profile"
+              target="_blank"
+              rel="noreferrer"
+              className="text-violet-400 hover:underline"
+            >
+              classic.warcraftlogs.com/profile
+            </a>
+            .
+          </span>
         </label>
         <div className="flex items-center gap-4 text-sm">
           <label className="flex items-center gap-2">
@@ -102,7 +123,7 @@ export function ClaApp() {
               onChange={(e) => setRemember(e.target.checked)}
               className="h-4 w-4"
             />
-            Remember on this device
+            Remember on this device (uses localStorage)
           </label>
           {hasStoredKey && (
             <button
@@ -194,6 +215,11 @@ export function ClaApp() {
           <Placeholder text="Click Run to scan per-player consumable usage during boss fights." />
         )
       )}
+
+      <footer className="mt-auto text-center text-[11px] text-zinc-600">
+        Direct browser → WCL. No backend, no telemetry. Your API key never
+        leaves this tab.
+      </footer>
     </div>
   );
 }

@@ -16,6 +16,12 @@ export interface CellValue {
   numeric?: number;
   /** Tooltip on hover. */
   tooltip?: string;
+  /**
+   * Optional deep-link URL. When set, the cell renders as a link that opens
+   * in a new tab (used for the WCL-event drill-downs the source script
+   * builds via HYPERLINK formulas).
+   */
+  url?: string;
 }
 
 /** A single row in the matrix — one metric across all players. */

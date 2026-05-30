@@ -447,7 +447,18 @@ export function MatrixView(props: Props) {
                         className={`border-b border-b-zinc-800/60 px-1 py-1 text-center tabular-nums ${colW} ${cellBorderClass(p.id)} ${value.display ? "text-zinc-100" : "text-zinc-700"}`}
                         title={value.tooltip}
                       >
-                        {value.display ?? ""}
+                        {value.display && value.url ? (
+                          <a
+                            href={value.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-violet-300 hover:text-violet-200 hover:underline"
+                          >
+                            {value.display}
+                          </a>
+                        ) : (
+                          value.display ?? ""
+                        )}
                       </td>
                     );
                   })}

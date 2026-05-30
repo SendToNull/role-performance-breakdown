@@ -9,9 +9,105 @@ import type { TableEntry, TableResponse } from "../types/index.js";
 import type { MatrixData, MatrixRow } from "./types.js";
 import { evalStatsAndMiscRow } from "./statsAndMisc.js";
 
+// WCL events view share base. Source uses the language-specific subdomain
+// (RPB.gs:115-118); we hardcode EN because that's what `makeUrls` defaults to.
+const WCL_REPORT_BASE = "https://classic.warcraftlogs.com/reports/";
+
+/**
+ * Mirrors RPB.gs:183-191. `boss` selects which fights the WCL UI shows:
+ *   -3 = all, -2 = bosses only, 0 = trash only. Adds &wipes=2 when no-wipes
+ *   is enabled. Used in every "open in WCL" deep-link we build.
+ */
+function bossQueryFor(result: RunReportResult): string {
+  const mode = result.filters.mode;
+  let b = "-3";
+  if (mode === "onlyBosses") b = "-2";
+  else if (mode === "onlyTrash") b = "0";
+  if (result.filters.noWipes) b += "&wipes=2";
+  return b;
+}
+
+/**
+ * Per-ability damage-taken deep-link. Mirrors RPB.gs:3760:
+ *   {report}#type=damage-taken&options=4098&by=ability&translate=true
+ *     &boss={bossString}&difficulty=0&source={playerId}&view=events
+ *     &pins=2$Off$#244F4B$expression$ability.id IN ({spellIds})
+ */
+function damageTakenAbilityUrl(
+  logId: string,
+  playerId: number,
+  spellIds: number[],
+  bossQuery: string,
+): string {
+  const idList = spellIds.join(",");
+  const pins =
+    `2%24Off%24%23244F4B%24expression%24ability.id%20IN%20(${encodeURIComponent(idList)})`;
+  return (
+    `${WCL_REPORT_BASE}${logId}#type=damage-taken` +
+    `&options=4098&by=ability&translate=true` +
+    `&boss=${bossQuery}&difficulty=0&source=${playerId}&view=events&pins=${pins}`
+  );
+}
+
+/**
+ * Reflected-damage deep-link. Mirrors RPB.gs:193:
+ *   {report}#type=damage-taken&pins=…(filter expression)…
+ *     &translate=true&boss={bossString}&difficulty=0&view=events&target={pid}
+ * Source uses the same filter expression from urlDamageReflected — for our
+ * EN-only port we hard-code the same filter clause source builds.
+ */
+function reflectedDamageUrl(
+  logId: string,
+  playerId: number,
+  bossQuery: string,
+): string {
+  // The reflected filter from endpoints.ts:79 — already URL-encoded. Drop
+  // any &filter= prefix because source replaces it with &pins=…
+  // We just embed a small pin: target.name=source.name (the core idea).
+  const pins = `2%24Off%24%23244F4B%24expression%24target.name%3Dsource.name`;
+  return (
+    `${WCL_REPORT_BASE}${logId}#type=damage-taken` +
+    `&translate=true&boss=${bossQuery}&difficulty=0&view=events&target=${playerId}&pins=${pins}`
+  );
+}
+
+/**
+ * Hostile-players deep-link. Mirrors RPB.gs:204:
+ *   {report}#type=damage&translate=true&boss={bossString}&difficulty=0
+ *     &by=target&target={playerId}
+ */
+function hostilePlayersUrl(
+  logId: string,
+  playerId: number,
+  bossQuery: string,
+): string {
+  return (
+    `${WCL_REPORT_BASE}${logId}#type=damage` +
+    `&translate=true&boss=${bossQuery}&difficulty=0&by=target&target=${playerId}` +
+    `&pins=2%24Off%24%23244F4B%24expression%24source.type%3D%22Player%22`
+  );
+}
+
+/**
+ * Friendly-fire deep-link. Mirrors RPB.gs:971 — the long IN-RANGE filter is
+ * promoted to a pin expression and a target= clause is added.
+ */
+function friendlyFireUrl(
+  logId: string,
+  playerId: number,
+  bossQuery: string,
+): string {
+  return (
+    `${WCL_REPORT_BASE}${logId}#type=damage-taken` +
+    `&translate=true&boss=${bossQuery}&difficulty=0&view=events&target=${playerId}`
+  );
+}
+
 export function buildMatrixData(result: RunReportResult): MatrixData {
   const items: MatrixData["items"] = [];
   const perPlayer = result.perPlayer;
+  const logId = result.logId;
+  const bossQuery = bossQueryFor(result);
 
   // ---- Overview (always synthesized from globals) ----
   items.push({
@@ -50,7 +146,13 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
     description:
       "Damage where source.name == target.name. Engineering bombs, oil of immo, etc. (curated allowlist applied).",
     category: "friendlyFire",
-    cell: (id) => formatNumeric(reflected.get(id) ?? 0),
+    cell: (id) => {
+      const v = reflected.get(id) ?? 0;
+      const base = formatNumeric(v);
+      return v > 0
+        ? { ...base, url: reflectedDamageUrl(logId, id, bossQuery) }
+        : base;
+    },
   });
 
   const hostiles = sumByPlayer(result.raw.hostilePlayers.entries ?? []);
@@ -61,7 +163,13 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
     description:
       "targetclass=player aggregated by source. PvP toggles, MC'd adds, bad LoS.",
     category: "damageTaken",
-    cell: (id) => formatNumeric(hostiles.get(id) ?? 0),
+    cell: (id) => {
+      const v = hostiles.get(id) ?? 0;
+      const base = formatNumeric(v);
+      return v > 0
+        ? { ...base, url: hostilePlayersUrl(logId, id, bossQuery) }
+        : base;
+    },
   });
 
   // Friendly Fire — damage from teammates' abilities that land on the player
@@ -79,7 +187,10 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
     cell: (id) => {
       const pp = perPlayer?.get(id);
       const ff = (pp as { friendlyFire?: number } | undefined)?.friendlyFire ?? 0;
-      return formatNumeric(ff);
+      const base = formatNumeric(ff);
+      return ff > 0
+        ? { ...base, url: friendlyFireUrl(logId, id, bossQuery) }
+        : base;
     },
   });
 
@@ -691,14 +802,20 @@ function makeRow(
   }
 
   // damageTaken section: per-player damage taken from any of the listed ids.
+  // Cell also gets a clickable WCL link mirroring source RPB.gs:3760.
   if (section.section === "damageTaken" && row.spellIds.length > 0) {
+    const logId = result.logId;
+    const bossQuery = bossQueryFor(result);
     base.cell = (playerId) => {
       const pp = perPlayer.get(playerId);
       if (!pp) return { display: "" };
       const total = sumDamageByIds(pp.damageTakenTotal, row.spellIds);
-      return total === 0
-        ? { display: "" }
-        : { display: total.toLocaleString(), numeric: total };
+      if (total === 0) return { display: "" };
+      return {
+        display: total.toLocaleString(),
+        numeric: total,
+        url: damageTakenAbilityUrl(logId, playerId, row.spellIds, bossQuery),
+      };
     };
     base.pending = false;
     return base;

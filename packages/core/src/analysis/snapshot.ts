@@ -29,6 +29,8 @@ export interface SnapshotCell {
   n?: number;
   /** Tooltip. */
   t?: string;
+  /** Optional WCL deep-link URL. */
+  u?: string;
 }
 
 export type SnapshotItem =

@@ -35,10 +35,13 @@ export function buildSnapshot(
         const v = it.cell(p.id);
         if (!v.display) {
           cells.push("");
-        } else if (v.numeric != null || v.tooltip) {
-          const cell: { d: string; n?: number; t?: string } = { d: v.display };
+        } else if (v.numeric != null || v.tooltip || v.url) {
+          const cell: { d: string; n?: number; t?: string; u?: string } = {
+            d: v.display,
+          };
           if (v.numeric != null) cell.n = v.numeric;
           if (v.tooltip) cell.t = v.tooltip;
+          if (v.url) cell.u = v.url;
           cells.push(cell);
         } else {
           cells.push(v.display);
@@ -96,7 +99,7 @@ export function snapshotToMatrixData(s: MatrixSnapshot): MatrixData {
       });
     } else {
       // Map player id → cell value via parallel index in s.players.
-      const byPlayerId = new Map<number, { display: string; numeric?: number; tooltip?: string }>();
+      const byPlayerId = new Map<number, { display: string; numeric?: number; tooltip?: string; url?: string }>();
       for (let i = 0; i < s.players.length; i++) {
         const player = s.players[i]!;
         const cell = it.cells[i];
@@ -105,11 +108,12 @@ export function snapshotToMatrixData(s: MatrixSnapshot): MatrixData {
         } else if (typeof cell === "string") {
           byPlayerId.set(player.id, { display: cell });
         } else {
-          const obj: { display: string; numeric?: number; tooltip?: string } = {
+          const obj: { display: string; numeric?: number; tooltip?: string; url?: string } = {
             display: cell.d,
           };
           if (cell.n != null) obj.numeric = cell.n;
           if (cell.t != null) obj.tooltip = cell.t;
+          if (cell.u != null) obj.url = cell.u;
           byPlayerId.set(player.id, obj);
         }
       }

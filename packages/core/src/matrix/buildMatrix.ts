@@ -64,6 +64,51 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
     cell: (id) => formatNumeric(hostiles.get(id) ?? 0),
   });
 
+  // Friendly Fire — damage from teammates' abilities that land on the player
+  // (Charge, Necrotic Plague, etc.). Source RPB.gs:964 builds a per-player
+  // damage-taken query with a long set of exclusion filters; we mirror that
+  // exact filter and fetch it per player.
+  items.push({
+    kind: "row",
+    id: "friendly-fire",
+    label: "Friendly Fire",
+    description:
+      "Damage from teammates' abilities (Charges/Plague/etc.) that hit the player. Excludes specific debuff sequences per source-script logic.",
+    category: "friendlyFire",
+    pending: !perPlayer,
+    cell: (id) => {
+      const pp = perPlayer?.get(id);
+      const ff = (pp as { friendlyFire?: number } | undefined)?.friendlyFire ?? 0;
+      return formatNumeric(ff);
+    },
+  });
+
+  // Total (partly) avoidable damage taken — sum of all damageTaken section
+  // rows + reflected + hostile-players + friendly-fire per player. Matches
+  // source's accumulating `totalAmount` at RPB.gs:3856-3884.
+  items.push({
+    kind: "row",
+    id: "total-avoidable-damage",
+    label: "Total (partly) avoidable damage taken",
+    description:
+      "Sum of all tracked damage-taken abilities + reflected self-damage + damage taken from hostile players + friendly fire.",
+    category: "damageTaken",
+    pending: !perPlayer,
+    cell: (id) => {
+      const pp = perPlayer?.get(id);
+      if (!pp) return formatNumeric((reflected.get(id) ?? 0) + (hostiles.get(id) ?? 0));
+      let sum = 0;
+      for (const entry of pp.damageTakenTotal.entries ?? []) {
+        sum += (entry.total ?? 0) as number;
+      }
+      sum += reflected.get(id) ?? 0;
+      sum += hostiles.get(id) ?? 0;
+      const ff = (pp as { friendlyFire?: number }).friendlyFire ?? 0;
+      sum += ff;
+      return formatNumeric(sum);
+    },
+  });
+
   // ---- Tracked sections (data-driven from configNew.csv) ----
   for (const section of TRACKED_SECTIONS) {
     const meta = sectionMeta(section.section);
@@ -153,7 +198,109 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
   // the allPlayersCasting global query (entries[].activeTime / totalTime).
   appendActivitySection(items, result, perPlayer);
 
+  // ---- Interrupted spells (RPB.gs:4523-4585) ----
+  appendInterruptedSection(items, result);
+
   return { items };
+}
+
+/**
+ * Walks the interrupted spells table and emits two summary rows per player:
+ *   - "# of interrupted spells"  → total interrupts across all spells
+ *   - "names and sources of interrupted spells" → "Spell (target1), Spell (target2), …"
+ *
+ * The interrupts table shape (WCL v1):
+ *   { entries: [{
+ *       entries: [{
+ *         guid, name,                       // the spell that was interrupted
+ *         details: [{
+ *           id,                              // player id that did the interrupt
+ *           actors: [{ name }],              // NPC targets whose spell was cut
+ *           total
+ *         }]
+ *       }]
+ *   }]}
+ */
+function appendInterruptedSection(
+  items: MatrixData["items"],
+  result: RunReportResult,
+): void {
+  type SpellEntry = {
+    guid?: number;
+    name?: string;
+    details?: Array<{
+      id?: number;
+      actors?: Array<{ name?: string }>;
+      total?: number;
+    }>;
+  };
+  const outerEntries = (result.raw.interrupted.entries ?? []) as Array<{
+    entries?: SpellEntry[];
+  }>;
+  const innerEntries: SpellEntry[] = [];
+  for (const o of outerEntries) {
+    if (Array.isArray(o.entries)) innerEntries.push(...o.entries);
+  }
+
+  // playerId → { total: number, label: string }
+  const byPlayer = new Map<number, { total: number; label: string }>();
+  for (const spell of innerEntries) {
+    if (!spell.details) continue;
+    for (const detail of spell.details) {
+      const pid = detail.id;
+      if (typeof pid !== "number") continue;
+      const cur = byPlayer.get(pid) ?? { total: 0, label: "" };
+      const seenTargets = new Set<string>();
+      const targetParts: string[] = [];
+      for (const a of detail.actors ?? []) {
+        if (!a.name) continue;
+        // Source strips the trailing " N" id suffix WCL appends to NPC names.
+        const stripped = a.name.replace(/\s\d+$/g, "");
+        if (!seenTargets.has(stripped)) {
+          seenTargets.add(stripped);
+          targetParts.push(stripped);
+        }
+      }
+      const spellLabel = spell.name ?? `spell ${spell.guid ?? "?"}`;
+      const segment = targetParts.length
+        ? `${spellLabel} (${targetParts.join(", ")})`
+        : spellLabel;
+      cur.total += detail.total ?? 0;
+      cur.label = cur.label ? `${cur.label}, ${segment}` : segment;
+      byPlayer.set(pid, cur);
+    }
+  }
+
+  items.push({
+    kind: "section",
+    id: "section-interrupts",
+    label: "Interrupted spells",
+    category: "interrupts",
+  });
+  items.push({
+    kind: "row",
+    id: "row-interrupts-count",
+    label: "# of interrupted spells",
+    description: "Total interrupts performed by this player across all targets.",
+    category: "interrupts",
+    cell: (id) => {
+      const v = byPlayer.get(id)?.total ?? 0;
+      return v === 0 ? { display: "" } : { display: v.toString(), numeric: v };
+    },
+  });
+  items.push({
+    kind: "row",
+    id: "row-interrupts-names",
+    label: "Names and sources of interrupted spells",
+    description: "Spell (target1, target2, …) for each unique spell interrupted.",
+    category: "interrupts",
+    cell: (id) => {
+      const label = byPlayer.get(id)?.label ?? "";
+      return label
+        ? { display: label, tooltip: label }
+        : { display: "" };
+    },
+  });
 }
 
 interface ClassActivityDef {

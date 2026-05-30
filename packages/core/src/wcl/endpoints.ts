@@ -84,6 +84,29 @@ export function makeUrls(ctx: EndpointContext) {
     windfuryAttacksOnTwistsDoneOnBossesPrefix: build("report/tables/damage-done", `${startEndStringNoFilter}&abilityid=1&by=source&options=2&sourceAurasPresent=20375,31892,25584&encounter=-2&sourceid=`),
     windfuryAttacksOnBossesPrefix: build("report/tables/buffs", `${startEndString}&abilityid=25584&by=source&options=2&encounter=-2&sourceid=`),
     damageDoneOnBossesPrefix: build("report/tables/damage-done", `${startEndString}&options=2&abilityid=1&by=source&options=2&encounter=-2&sourceid=`),
+
+    /**
+     * Per-player "friendly fire" URL. Returns a single damage-taken aggregate
+     * for the given player after excluding the IN-RANGE debuff sequences
+     * source script lists at RPB.gs:965 (specific TBC mechanics that
+     * shouldn't count as friendly fire). Substitute %PLAYER_NAME% and
+     * %PLAYER_ID% per player when calling.
+     *
+     * options=4135 includes friendly-source damage, by=target groups under
+     * the player so entries[0].total holds the sum.
+     */
+    friendlyFireTemplate:
+      `${base}report/tables/damage-taken/${logId}${apiKeyString}` +
+      `${startEndStringNoFilter}` +
+      `&filter=` +
+      [29546, 45717, 37122, 37135, 41345, 43361]
+        .map(
+          (id) =>
+            `NOT%20IN%20RANGE%20FROM%20type%20%3D%20%22applydebuff%22%20AND%20ability.id%20%3D%20%22${id}%22%20AND%20target.name%3D%22%PLAYER_NAME%%22%20TO%20type%20%3D%20%22removedebuff%22%20and%20ability.id%3D%22${id}%22%20AND%20target.name%3D%22%PLAYER_NAME%%22%20END`,
+        )
+        .join("%20AND%20") +
+      `%20AND%20encounterid%20%21%3D%20724%20AND%20ability.id%20%21%3D%2046768` +
+      `&options=4135&by=target&targetid=%PLAYER_ID%`,
   };
 }
 

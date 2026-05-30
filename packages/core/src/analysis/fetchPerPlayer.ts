@@ -33,6 +33,9 @@ export interface PerPlayerData {
   healingDone: TableResponse;
   healingReceived: TableResponse;
 
+  /** Total friendly-fire damage taken (RPB.gs:964-970). */
+  friendlyFire: number;
+
   // Class-specific
   judgementDebuffs?: TableResponse; // paladin
   vtManaGain?: TableResponse; // priest
@@ -104,6 +107,14 @@ async function fetchOnePlayer(
     healingReceived: client.getJson<TableResponse>(
       e.healingTargetPrefix + p.id + "&by=ability",
     ),
+    friendlyFire: (async () => {
+      const url = e.friendlyFireTemplate
+        .replace(/%PLAYER_NAME%/g, encodeURIComponent(p.name))
+        .replace(/%PLAYER_ID%/g, String(p.id));
+      const data = await client.getJson<TableResponse>(url);
+      const first = data.entries?.[0];
+      return typeof first?.total === "number" ? first.total : 0;
+    })(),
   };
 
   // Class-specific.

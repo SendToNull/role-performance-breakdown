@@ -8,6 +8,10 @@ import {
 import type { TableEntry, TableResponse } from "../types/index.js";
 import type { MatrixData, MatrixRow } from "./types.js";
 import { evalStatsAndMiscRow } from "./statsAndMisc.js";
+import {
+  DAMAGE_REFLECTED_FILTER,
+  friendlyFireFilterFor,
+} from "../wcl/endpoints.js";
 
 // WCL events view share base. Source uses the language-specific subdomain
 // (RPB.gs:115-118); we hardcode EN because that's what `makeUrls` defaults to.
@@ -27,11 +31,17 @@ function bossQueryFor(result: RunReportResult): string {
   return b;
 }
 
+/** URL-encoded pin prefix used by the WCL events view: `2$Off$#244F4B$expression$`. */
+const PIN_EXPR_PREFIX = "2%24Off%24%23244F4B%24expression%24";
+
 /**
  * Per-ability damage-taken deep-link. Mirrors RPB.gs:3760:
  *   {report}#type=damage-taken&options=4098&by=ability&translate=true
  *     &boss={bossString}&difficulty=0&source={playerId}&view=events
  *     &pins=2$Off$#244F4B$expression$ability.id IN ({spellIds})
+ *
+ * The spell-id list goes in as literal `1,2,3` — source emits literal commas
+ * (RPB.gs:3760 substr), not %2C, so we mirror that.
  */
 function damageTakenAbilityUrl(
   logId: string,
@@ -40,8 +50,7 @@ function damageTakenAbilityUrl(
   bossQuery: string,
 ): string {
   const idList = spellIds.join(",");
-  const pins =
-    `2%24Off%24%23244F4B%24expression%24ability.id%20IN%20(${encodeURIComponent(idList)})`;
+  const pins = `${PIN_EXPR_PREFIX}ability.id%20IN%20(${idList})`;
   return (
     `${WCL_REPORT_BASE}${logId}#type=damage-taken` +
     `&options=4098&by=ability&translate=true` +
@@ -50,24 +59,22 @@ function damageTakenAbilityUrl(
 }
 
 /**
- * Reflected-damage deep-link. Mirrors RPB.gs:193:
- *   {report}#type=damage-taken&pins=…(filter expression)…
- *     &translate=true&boss={bossString}&difficulty=0&view=events&target={pid}
- * Source uses the same filter expression from urlDamageReflected — for our
- * EN-only port we hard-code the same filter clause source builds.
+ * Reflected-damage deep-link. Mirrors RPB.gs:193 — source does a literal
+ * `replace("&filter=", "&pins=2$Off$#244F4B$expression$")` on the
+ * damage-reflected API URL, carrying the full 20+ ability-id exclusion
+ * filter through as the pin expression. We reuse the same exported filter
+ * constant so the URL drills into exactly the events the cell number
+ * was computed from.
  */
 function reflectedDamageUrl(
   logId: string,
   playerId: number,
   bossQuery: string,
 ): string {
-  // The reflected filter from endpoints.ts:79 — already URL-encoded. Drop
-  // any &filter= prefix because source replaces it with &pins=…
-  // We just embed a small pin: target.name=source.name (the core idea).
-  const pins = `2%24Off%24%23244F4B%24expression%24target.name%3Dsource.name`;
   return (
     `${WCL_REPORT_BASE}${logId}#type=damage-taken` +
-    `&translate=true&boss=${bossQuery}&difficulty=0&view=events&target=${playerId}&pins=${pins}`
+    `&pins=${PIN_EXPR_PREFIX}${DAMAGE_REFLECTED_FILTER}` +
+    `&translate=true&boss=${bossQuery}&difficulty=0&view=events&target=${playerId}`
   );
 }
 
@@ -84,21 +91,26 @@ function hostilePlayersUrl(
   return (
     `${WCL_REPORT_BASE}${logId}#type=damage` +
     `&translate=true&boss=${bossQuery}&difficulty=0&by=target&target=${playerId}` +
-    `&pins=2%24Off%24%23244F4B%24expression%24source.type%3D%22Player%22`
+    `&pins=${PIN_EXPR_PREFIX}source.type%3D%22Player%22`
   );
 }
 
 /**
- * Friendly-fire deep-link. Mirrors RPB.gs:971 — the long IN-RANGE filter is
- * promoted to a pin expression and a target= clause is added.
+ * Friendly-fire deep-link. Mirrors RPB.gs:971 — source again uses the
+ * `&filter=` → `&pins=` substitution to carry the IN-RANGE exclusion chain
+ * through to the events view. We rebuild the filter expression for this
+ * specific player (it references the player name in each IN-RANGE clause)
+ * and inject it as the pin expression.
  */
 function friendlyFireUrl(
   logId: string,
   playerId: number,
+  playerName: string,
   bossQuery: string,
 ): string {
   return (
     `${WCL_REPORT_BASE}${logId}#type=damage-taken` +
+    `&pins=${PIN_EXPR_PREFIX}${friendlyFireFilterFor(playerName)}` +
     `&translate=true&boss=${bossQuery}&difficulty=0&view=events&target=${playerId}`
   );
 }
@@ -186,10 +198,11 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
     pending: !perPlayer,
     cell: (id) => {
       const pp = perPlayer?.get(id);
-      const ff = (pp as { friendlyFire?: number } | undefined)?.friendlyFire ?? 0;
+      if (!pp) return formatNumeric(0);
+      const ff = pp.friendlyFire;
       const base = formatNumeric(ff);
       return ff > 0
-        ? { ...base, url: friendlyFireUrl(logId, id, bossQuery) }
+        ? { ...base, url: friendlyFireUrl(logId, id, pp.playerName, bossQuery) }
         : base;
     },
   });
@@ -232,8 +245,7 @@ export function buildMatrixData(result: RunReportResult): MatrixData {
       if (r > 0) sum += r;
       const h = hostiles.get(id) ?? 0;
       if (h > 0) sum += h;
-      const ff = pp.friendlyFire ?? 0;
-      if (ff > 0) sum += ff;
+      if (pp.friendlyFire > 0) sum += pp.friendlyFire;
       return formatNumeric(sum);
     },
   });

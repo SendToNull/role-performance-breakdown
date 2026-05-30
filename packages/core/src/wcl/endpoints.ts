@@ -23,6 +23,40 @@ export interface EndpointContext {
 /** Filter that excludes the perennially broken encounter id 724 (cf. RPB.gs:105). */
 export const ENCOUNTER_FILTER_NOT_724 = "encounterid%20%21%3D%20724";
 
+/**
+ * URL-encoded filter expression source uses for the damage-reflected query
+ * (RPB.gs:148). Exported so both the API URL builder and the WCL deep-link
+ * builder use the same source-of-truth filter — that's the only way to
+ * guarantee the deep-link drills into the same event set the cell number was
+ * computed from. Source at RPB.gs:193 does `&filter=` → `&pins=…` substitution
+ * to convert this same expression into a pin filter for the web UI.
+ */
+export const DAMAGE_REFLECTED_FILTER =
+  `target.name%3Dsource.name%20AND%20ability.id!%3D%27348191%27%20AND%20ability.id!%3D%2716666%27%20AND%20ability.id!%3D%2711684%27%20AND%20ability.id!%3D%2711683%27%20AND%20ability.id!%3D%271949%27%20AND%20ability.id!%3D%2726557%27%20AND%20ability.id!%3D%2728622%27%20AND%20ability.id!%3D%27290025%27%20AND%20ability.id!%3D%2727869%27%20AND%20ability.id!%3D%2716666%27%20AND%20ability.id!%3D%2713241%27AND%20ability.id!%3D%2720476%27AND%20ability.id!%3D%2732221%27AND%20ability.id!%3D%2732220%27AND%20ability.id!%3D%2730486%27AND%20ability.id!%3D%27351761%27AND%20ability.id!%3D%2737852%27AND%20ability.id!%3D%2727213%27AND%20ability.id!%3D%2738281%27AND%20ability.id!%3D%2729766%27AND%20ability.id!%3D%27348703%27AND%20ability.id!%3D%2741352%27AND%20ability.id!%3D%2740871%27AND%20ability.id!%3D%27348703%27AND%20ability.id!%3D%2741352%27AND%20ability.id!%3D%2745348%27AND%20ability.id!%3D%2741352%27AND%20ability.id!%3D%2745034%27AND%20ability.id!%3D%2745642%27%20AND%20${ENCOUNTER_FILTER_NOT_724}`;
+
+/**
+ * Builds the URL-encoded friendly-fire filter expression for a given player
+ * (RPB.gs:965). Substitutes the player name into the 6 IN-RANGE clauses that
+ * exclude specific TBC mechanic debuffs from the count.
+ *
+ * Note: the name is passed to encodeURIComponent so non-ASCII chars (ä, é)
+ * and reserved chars (apostrophe) are properly encoded for the URL query
+ * value — WCL URL-decodes once, so the filter expression sees the literal
+ * name. (GAS's UrlFetchApp does this implicitly; browser fetch does not.)
+ */
+export function friendlyFireFilterFor(playerName: string): string {
+  const encoded = encodeURIComponent(playerName);
+  return (
+    [29546, 45717, 37122, 37135, 41345, 43361]
+      .map(
+        (id) =>
+          `NOT%20IN%20RANGE%20FROM%20type%20%3D%20%22applydebuff%22%20AND%20ability.id%20%3D%20%22${id}%22%20AND%20target.name%3D%22${encoded}%22%20TO%20type%20%3D%20%22removedebuff%22%20and%20ability.id%3D%22${id}%22%20AND%20target.name%3D%22${encoded}%22%20END`,
+      )
+      .join("%20AND%20") +
+    `%20AND%20encounterid%20%21%3D%20724%20AND%20ability.id%20%21%3D%2046768`
+  );
+}
+
 export function makeUrls(ctx: EndpointContext) {
   const { lang, apiKey, logId, mode, noWipes } = ctx;
   const host = HOSTS[lang];
@@ -76,7 +110,10 @@ export function makeUrls(ctx: EndpointContext) {
     hostilePlayers: build("report/tables/damage-done", `${startEndString}&targetclass=player&by=source`),
     healingPrefix: build("report/tables/healing", `${startEndString}&sourceid=`),
     healingTargetPrefix: build("report/tables/healing", `${startEndString}&targetid=`),
-    damageReflected: build("report/tables/damage-taken", `${startEndStringNoFilter}&filter=target.name%3Dsource.name%20AND%20ability.id!%3D%27348191%27%20AND%20ability.id!%3D%2716666%27%20AND%20ability.id!%3D%2711684%27%20AND%20ability.id!%3D%2711683%27%20AND%20ability.id!%3D%271949%27%20AND%20ability.id!%3D%2726557%27%20AND%20ability.id!%3D%2728622%27%20AND%20ability.id!%3D%27290025%27%20AND%20ability.id!%3D%2727869%27%20AND%20ability.id!%3D%2716666%27%20AND%20ability.id!%3D%2713241%27AND%20ability.id!%3D%2720476%27AND%20ability.id!%3D%2732221%27AND%20ability.id!%3D%2732220%27AND%20ability.id!%3D%2730486%27AND%20ability.id!%3D%27351761%27AND%20ability.id!%3D%2737852%27AND%20ability.id!%3D%2727213%27AND%20ability.id!%3D%2738281%27AND%20ability.id!%3D%2729766%27AND%20ability.id!%3D%27348703%27AND%20ability.id!%3D%2741352%27AND%20ability.id!%3D%2740871%27AND%20ability.id!%3D%27348703%27AND%20ability.id!%3D%2741352%27AND%20ability.id!%3D%2745348%27AND%20ability.id!%3D%2741352%27AND%20ability.id!%3D%2745034%27AND%20ability.id!%3D%2745642%27%20AND%20${ENCOUNTER_FILTER_NOT_724}`),
+    damageReflected: build(
+      "report/tables/damage-taken",
+      `${startEndStringNoFilter}&filter=${DAMAGE_REFLECTED_FILTER}`,
+    ),
     interrupted: build("report/tables/interrupts", startEndString),
     vtManaGainPrefix: build("report/tables/resources-gains", `${startEndStringNoFilter}&filter=ability.id%20%3D%2034919%20AND%20${ENCOUNTER_FILTER_NOT_724}&abilityid=100&sourceid=`),
     shadowDamageDonePrefix: build("report/tables/damage-done", `${startEndStringNoFilter}&filter=ability.id%20IN%20%288129%2C8131%2C10874%2C10875%2C10876%2C25379%2C25380%2C8092%2C8102%2C8104%2C8105%2C8106%2C10945%2C10946%2C10947%2C25372%2C25375%2C25387%2C18807%2C17314%2C17313%2C17312%2C17311%2C15407%2C32379%2C32996%2C25368%2C25367%2C10894%2C10893%2C10892%2C2767%2C992%2C970%2C594%2C589%2C34914%2C34916%2C34917%2C25467%2C45055%29%20AND%20${ENCOUNTER_FILTER_NOT_724}&by=source&sourceid=`),
@@ -86,27 +123,18 @@ export function makeUrls(ctx: EndpointContext) {
     damageDoneOnBossesPrefix: build("report/tables/damage-done", `${startEndString}&options=2&abilityid=1&by=source&options=2&encounter=-2&sourceid=`),
 
     /**
-     * Per-player "friendly fire" URL. Returns a single damage-taken aggregate
-     * for the given player after excluding the IN-RANGE debuff sequences
-     * source script lists at RPB.gs:965 (specific TBC mechanics that
-     * shouldn't count as friendly fire). Substitute %PLAYER_NAME% and
-     * %PLAYER_ID% per player when calling.
+     * Build the per-player "friendly fire" URL. Source: RPB.gs:965-970.
+     * Use this instead of holding a template string — the filter expression
+     * depends on the player name and needs proper URL-encoding per name.
      *
      * options=4135 includes friendly-source damage, by=target groups under
      * the player so entries[0].total holds the sum.
      */
-    friendlyFireTemplate:
+    friendlyFireUrlFor: (playerName: string, playerId: number) =>
       `${base}report/tables/damage-taken/${logId}${apiKeyString}` +
       `${startEndStringNoFilter}` +
-      `&filter=` +
-      [29546, 45717, 37122, 37135, 41345, 43361]
-        .map(
-          (id) =>
-            `NOT%20IN%20RANGE%20FROM%20type%20%3D%20%22applydebuff%22%20AND%20ability.id%20%3D%20%22${id}%22%20AND%20target.name%3D%22%PLAYER_NAME%%22%20TO%20type%20%3D%20%22removedebuff%22%20and%20ability.id%3D%22${id}%22%20AND%20target.name%3D%22%PLAYER_NAME%%22%20END`,
-        )
-        .join("%20AND%20") +
-      `%20AND%20encounterid%20%21%3D%20724%20AND%20ability.id%20%21%3D%2046768` +
-      `&options=4135&by=target&targetid=%PLAYER_ID%`,
+      `&filter=${friendlyFireFilterFor(playerName)}` +
+      `&options=4135&by=target&targetid=${playerId}`,
   };
 }
 

@@ -108,9 +108,7 @@ async function fetchOnePlayer(
       e.healingTargetPrefix + p.id + "&by=ability",
     ),
     friendlyFire: (async () => {
-      const url = e.friendlyFireTemplate
-        .replace(/%PLAYER_NAME%/g, encodeURIComponent(p.name))
-        .replace(/%PLAYER_ID%/g, String(p.id));
+      const url = e.friendlyFireUrlFor(p.name, p.id);
       const data = await client.getJson<TableResponse>(url);
       const first = data.entries?.[0];
       return typeof first?.total === "number" ? first.total : 0;

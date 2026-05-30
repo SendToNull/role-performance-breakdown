@@ -18,6 +18,7 @@ import { WCLClient } from "../wcl/client.js";
 import { makeUrls } from "../wcl/endpoints.js";
 import { parseReportInput } from "../wcl/parseReportInput.js";
 import { BAD_ENCHANTS, SUBOPTIMAL_ITEM_IDS } from "./gearIssueData.js";
+import { SOCKET_COUNTS } from "./gearSocketData.js";
 import {
   BLUE_GEMS,
   META_GEMS,
@@ -125,6 +126,9 @@ const BAD_ENCHANT_BY_ID = (() => {
   }
   return m;
 })();
+
+/** itemId → expected socket count (from the CLA workbook's `sockets` tab). */
+const SOCKET_COUNT_BY_ITEM_ID = new Map<number, number>(SOCKET_COUNTS);
 
 function lookupBadEnchant(enchantId: number, slot: number): string | null {
   const candidates = BAD_ENCHANT_BY_ID.get(enchantId);
@@ -437,14 +441,13 @@ export async function fetchGearIssues(
           }
         }
 
-        // -- Gem-level checks: wrong-class gems, uncut, common/uncommon
-        //    (GearIssues.gs:397-422 + 753-769) --
+        // -- Gem-level checks (not gated by ignore list): wrong-class gems
+        //    and uncut gems (GearIssues.gs:397-422) --
         const gems = Array.isArray(r["gems"])
           ? (r["gems"] as Array<Record<string, unknown>>)
           : [];
         for (const g of gems) {
           const gid = typeof g["id"] === "number" ? g["id"] : 0;
-          const ilvl = typeof g["itemLevel"] === "number" ? g["itemLevel"] : 0;
           if (!gid) continue;
           if (META_GEMS.has(gid)) continue; // handled separately
 
@@ -456,14 +459,6 @@ export async function fetchGearIssues(
           }
           if (UNCUT_GEMS.has(gid)) {
             mergeIssue(agg, fight, mk("uncutGem"));
-          }
-
-          if (ilvl > 0) {
-            if (ilvl < 60) {
-              mergeIssue(agg, fight, mk("commonGem"));
-            } else if (ilvl === 60 && !UNCOMMON_GEM_EXCLUSIONS.has(gid)) {
-              mergeIssue(agg, fight, mk("uncommonGem"));
-            }
           }
         }
 
@@ -544,11 +539,32 @@ export async function fetchGearIssues(
           mergeIssue(agg, fight, mk("suboptimalItem"));
         }
 
-        // -- Enchant checks (GearIssues.gs:686-737) --
-        // The script applies the "ignore" gate ONLY to the enchant + socket
-        // checks below — class-vs-stat and PvP/SR/riding checks above happen
-        // regardless. So the ignore list does NOT short-circuit the file.
+        // -- Enchant / socket / gem-quality checks (GearIssues.gs:686-770) --
+        // The hardcoded ignore list gates the enchant, missing-socket, AND
+        // common/uncommon gem-quality checks. Class-vs-stat and context flags
+        // above happen regardless.
         if (IGNORE_ITEM_IDS.has(itemId)) continue;
+
+        // -- Missing gem in socket (GearIssues.gs:738-751) --
+        const expectedSockets = SOCKET_COUNT_BY_ITEM_ID.get(itemId);
+        if (typeof expectedSockets === "number" && gems.length < expectedSockets) {
+          for (let i = gems.length; i < expectedSockets; i++) {
+            mergeIssue(agg, fight, mk("noGem"));
+          }
+        }
+
+        // -- Common / uncommon gem quality (GearIssues.gs:753-770) --
+        for (const g of gems) {
+          const gid = typeof g["id"] === "number" ? g["id"] : 0;
+          const ilvl = typeof g["itemLevel"] === "number" ? g["itemLevel"] : 0;
+          if (!gid || !ilvl) continue;
+          if (META_GEMS.has(gid)) continue;
+          if (ilvl < 60) {
+            mergeIssue(agg, fight, mk("commonGem"));
+          } else if (ilvl === 60 && !UNCOMMON_GEM_EXCLUSIONS.has(gid)) {
+            mergeIssue(agg, fight, mk("uncommonGem"));
+          }
+        }
 
         if (ENCHANTABLE_SLOTS.has(slot)) {
           // Off-hand "_misc_" exception (totems / librams / idols)

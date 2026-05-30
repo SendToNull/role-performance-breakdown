@@ -144,6 +144,7 @@ function Legend() {
     "uselessRidingGear",
     "uselessSlowfallGear",
     "uselessEngiGear",
+    "noGem",
     "commonGem",
     "uncommonGem",
     "metaGemInactive",

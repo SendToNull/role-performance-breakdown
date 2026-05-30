@@ -66,6 +66,10 @@ async function handleCommand(
   const noWipes = includeRpb
     ? (interaction.options.getBoolean("no-wipes") ?? false)
     : undefined;
+  // CLA-only option; declared on /cla and /full, ignored on /rpb.
+  const includeMotherShahraz = includeCla
+    ? (interaction.options.getBoolean("mother-shahraz") ?? false)
+    : undefined;
 
   await interaction.deferReply();
 
@@ -79,6 +83,7 @@ async function handleCommand(
         includeCla,
         ...(mode !== undefined ? { mode } : {}),
         ...(noWipes !== undefined ? { noWipes } : {}),
+        ...(includeMotherShahraz ? { includeMotherShahraz: true } : {}),
       },
       (msg) => console.log(`[${cmd} ${snapshotPreview(report)}] ${msg}`),
     );

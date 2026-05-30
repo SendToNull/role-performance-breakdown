@@ -63,9 +63,12 @@ In a channel where the bot is allowed:
 /rpb report:https://classic.warcraftlogs.com/reports/AbCdEf...
 /rpb report:AbCdEf123 mode:all no-wipes:true
 /cla report:AbCdEf123
+/cla report:AbCdEf123 mother-shahraz:true
 /full report:AbCdEf123
-/full report:AbCdEf123 mode:onlyBosses no-wipes:true
+/full report:AbCdEf123 mode:onlyBosses no-wipes:true mother-shahraz:true
 ```
+
+`mother-shahraz:true` surfaces noEnchant/badEnchant flags that only appear on Mother Shahraz (off by default — the cloak spell-pen swap on that fight is usually intentional).
 
 The bot replies with a link to the web app. `/rpb` opens to the Role Performance matrix, `/cla` opens to Gear Issues with a Consumables tab, and `/full` opens to RPB with tabs for both Gear Issues and Consumables.
 

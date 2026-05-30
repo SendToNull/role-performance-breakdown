@@ -76,6 +76,8 @@ Leave the process running. You should see `Logged in as <bot-name>#<discriminato
 
 `/rpb` and `/full` also accept `mode:` (all / onlyBosses / onlyTrash) and `no-wipes:`. `/cla` ignores those — it always scans every boss fight in the report.
 
+`/cla` and `/full` accept `mother-shahraz:true` to surface enchant flags that only appear on Mother Shahraz (they're suppressed by default since the spell-pen cloak quirks on that fight are usually intentional).
+
 To keep the bot up after you close the terminal, run it under a process manager — examples:
 
 ```sh

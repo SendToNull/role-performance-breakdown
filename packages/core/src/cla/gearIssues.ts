@@ -204,8 +204,12 @@ export interface FetchGearIssuesInput {
   apiKey: string;
   /** Additional item ids to whitelist (user-curated). */
   ignoreItemIds?: number[];
-  /** If true, suppress noEnchant/badEnchant issues seen ONLY on Mother Shahraz. */
-  excludeMotherShahraz?: boolean;
+  /**
+   * Include noEnchant / badEnchant issues that only appear on Mother Shahraz.
+   * Default false: suppress them, since the cloak-spell-pen + similar quirks
+   * on that fight are usually intentional.
+   */
+  includeMotherShahraz?: boolean;
   clientOptions?: Omit<
     ConstructorParameters<typeof WCLClient>[0],
     "apiKey"
@@ -281,7 +285,9 @@ export async function fetchGearIssues(
   }
 
   const userIgnoreIds = new Set(input.ignoreItemIds ?? []);
-  const excludeMotherShahraz = input.excludeMotherShahraz === true;
+  // Default: exclude Mother-Shahraz-only enchant flags. Pass
+  // includeMotherShahraz: true to surface them.
+  const includeMotherShahraz = input.includeMotherShahraz === true;
 
   // Per-boss casts gives us each player's gear at that fight.
   const perFight = await Promise.all(
@@ -649,10 +655,11 @@ export async function fetchGearIssues(
   for (const agg of playersById.values()) {
     for (const [itemId, deferred] of agg.deferredEnchant) {
       const flags = agg.enchantBossFlags.get(itemId);
-      // Mother-Shahraz suppression: drop if user requested AND issue was seen
-      // only on Mother Shahraz (607), never elsewhere.
+      // Mother-Shahraz suppression: drop if the issue was seen ONLY on Mother
+      // Shahraz (607) and never elsewhere, unless the caller asked to include
+      // those flags.
       if (
-        excludeMotherShahraz &&
+        !includeMotherShahraz &&
         flags &&
         flags.onMother &&
         !flags.elsewhere

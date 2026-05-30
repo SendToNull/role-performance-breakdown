@@ -39,6 +39,14 @@ const cla = new SlashCommandBuilder()
   .setDescription("Combat Log Analytics (gear issues + consumables)")
   .addStringOption((o) =>
     o.setName("report").setDescription("WCL report URL or id").setRequired(true),
+  )
+  .addBooleanOption((o) =>
+    o
+      .setName("mother-shahraz")
+      .setDescription(
+        "Surface enchant flags that only appear on Mother Shahraz (off by default)",
+      )
+      .setRequired(false),
   );
 
 const full = new SlashCommandBuilder()
@@ -60,6 +68,14 @@ const full = new SlashCommandBuilder()
   )
   .addBooleanOption((o) =>
     o.setName("no-wipes").setDescription("Exclude wipes (RPB only)").setRequired(false),
+  )
+  .addBooleanOption((o) =>
+    o
+      .setName("mother-shahraz")
+      .setDescription(
+        "Surface CLA enchant flags that only appear on Mother Shahraz (off by default)",
+      )
+      .setRequired(false),
   );
 
 async function main() {

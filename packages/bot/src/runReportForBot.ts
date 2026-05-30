@@ -104,6 +104,8 @@ function describeFilters(input: BotReportInput): string {
 export interface ClaSnapshotInput {
   apiKey: string;
   reportPathOrId: string;
+  /** Surface noEnchant/badEnchant issues that only appear on Mother Shahraz. */
+  includeMotherShahraz?: boolean;
 }
 
 export interface ClaSnapshotOutput {
@@ -133,6 +135,9 @@ export async function generateClaPayload(
     fetchGearIssues({
       reportPathOrId: input.reportPathOrId,
       apiKey: input.apiKey,
+      ...(input.includeMotherShahraz
+        ? { includeMotherShahraz: true }
+        : {}),
       clientOptions: { concurrency: 8, onProgress },
     }),
     fetchConsumables({
@@ -164,6 +169,8 @@ export interface BundleInput {
   /** RPB-only filter knobs. */
   mode?: "all" | "onlyBosses" | "onlyTrash";
   noWipes?: boolean;
+  /** CLA-only: surface Mother-Shahraz-only enchant flags. */
+  includeMotherShahraz?: boolean;
 }
 
 export interface BundleOutput {
@@ -203,7 +210,13 @@ export async function generateBundle(
     : Promise.resolve(null);
   const claPromise = input.includeCla
     ? generateClaPayload(
-        { apiKey: input.apiKey, reportPathOrId: input.reportPathOrId },
+        {
+          apiKey: input.apiKey,
+          reportPathOrId: input.reportPathOrId,
+          ...(input.includeMotherShahraz
+            ? { includeMotherShahraz: true }
+            : {}),
+        },
         onLog,
       )
     : Promise.resolve(null);

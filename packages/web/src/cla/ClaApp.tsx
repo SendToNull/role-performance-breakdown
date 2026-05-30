@@ -19,6 +19,7 @@ export function ClaApp() {
   const [hasStoredKey, setHasStoredKey] = useState(false);
   const [reportInput, setReportInput] = useState("");
   const [tab, setTab] = useState<ClaTab>("gear-issues");
+  const [includeMotherShahraz, setIncludeMotherShahraz] = useState(false);
   const [progress, setProgress] = useState<ProgressEvent | null>(null);
 
   useEffect(() => {
@@ -36,6 +37,7 @@ export function ClaApp() {
       return fetchGearIssues({
         reportPathOrId: reportInput.trim(),
         apiKey: apiKey.trim(),
+        ...(includeMotherShahraz ? { includeMotherShahraz: true } : {}),
         clientOptions: {
           concurrency: 8,
           onProgress: (e) => setProgress(e),
@@ -148,6 +150,17 @@ export function ClaApp() {
             </span>
           )}
         </div>
+        {tab === "gear-issues" && (
+          <label className="flex items-center gap-2 text-xs text-zinc-400">
+            <input
+              type="checkbox"
+              checked={includeMotherShahraz}
+              onChange={(e) => setIncludeMotherShahraz(e.target.checked)}
+              className="h-4 w-4"
+            />
+            Include enchant flags that only appear on Mother Shahraz
+          </label>
+        )}
         {activeMut.error && (
           <p className="rounded-md border border-red-900/50 bg-red-950/30 px-3 py-2 text-sm text-red-300">
             {activeMut.error.message}

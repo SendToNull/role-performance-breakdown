@@ -1,6 +1,13 @@
 // Combat Log Analytics — Consumables.
 // Ports the per-player consumable tracking from Consumables.gs.
 //
+// Source's spell-id-to-category table lives in an external Google Sheet
+// (`buffConsumables` tab in spreadsheet 1pIbbPkn9i5jxyQ60Xt86fLthtbdCAmFriIpPSvmXiu0)
+// loaded at runtime — not inline in the .gs file. The CONSUMABLE_CATEGORIES
+// list below is a verbatim copy of that table's column data, captured 2026-05.
+// Do NOT add IDs by guessing from spell name pattern; if a new TBC consumable
+// shows up, add it here only after confirming it in the source table.
+//
 // Algorithm (Consumables.gs:230-322):
 //   For each player and each boss fight:
 //     - Source queries report/tables/buffs?start=fight.start&end=fight.end
@@ -8,22 +15,28 @@
 //       and intersect aura bands with each boss fight client-side — same data,
 //       fewer API calls.
 //   playerFightCount = boss fights where the player had any aura overlap
-//                      (source: line 250-254, "fights where bossData.auras
-//                       is non-empty")
-//   For each category (in column order):
-//     bossIdsFound = boss fights where any aura with a matching spell id
-//                    (or a matching name pattern) had a band overlapping
-//                    the fight
-//     Flask vs Battle/Guardian exclusion (source: line 272 + 289-290): if a
-//     fight already had battle OR guardian elixir, that fight is removed
-//     from the flask count.
+//                      (source line 250-254).
+//   For each category in column order (battle, guardian, flask, food, scroll):
+//     bossIdsFound = boss fights where any aura with a matching spell id had
+//                    a band overlapping the fight.
+//     Flask vs Battle/Guardian exclusion (source line 272 + 289-290): a fight
+//     that already had battle OR guardian is removed from the flask count.
 //   percentage = round(bossIdsFound / playerFightCount * 100)
 //
 // Why sourceid not targetid: source uses sourceid for the per-fight buff
-// query. This filters to auras the player applied themselves — exactly what
-// "did this player consume X" means. Using targetid would also catch buffs
-// cast on the player by others (drums, raid buffs, etc.) which would inflate
-// the counts.
+// query — filters to auras the player applied themselves. targetid would also
+// catch buffs cast on the player by others (raid buffs, drums from other
+// players, etc.) and inflate the counts.
+//
+// Suboptimal flagging (source line 275): a giant boolean OR of class-vs-spell
+// gates. When it fires for a player on a given consumable, source styles the
+// cell bold+italic with a gray background AND accumulates the spell name into
+// a per-player suboptimal-strings list shown in the right margin.
+//
+// What's NOT yet ported: weapon enhancement (source line 323-447). That path
+// fetches per-fight summary tables and scans combatantInfo.gear for slot 15/16
+// temporaryEnchant ids; it's a different data source from buff auras and
+// needs its own port. The column is omitted from the matrix until that lands.
 
 import type { FightsResponse, TableResponse } from "../types/index.js";
 import { WCLClient } from "../wcl/client.js";
@@ -33,64 +46,39 @@ import { parseReportInput } from "../wcl/parseReportInput.js";
 export interface ConsumableCategory {
   id: string;
   label: string;
-  /** Spell ids that count toward this category. */
+  /** Spell ids that count toward this category. Verbatim from source's conf sheet. */
   spellIds: number[];
   /** Help text shown on hover. */
   description?: string;
 }
 
 /**
- * Categories iterate in this order. Battle + Guardian must be evaluated
- * BEFORE Flask so the flask-exclusion logic works correctly (a fight with
- * battle/guardian doesn't count toward flask — they're mutually exclusive).
- *
- * Spell ids: harvested from Consumables.gs:275 (the suboptimal-class check
- * is the only place ids appear inline, since the actual category lists live
- * in a hidden Google-Sheets config tab we can't fetch). Cross-referenced
- * against TBC Wowhead.
+ * Verbatim copy of the `buffConsumables` configuration tab columns from the
+ * RPB source spreadsheet. Order matches source's iteration (Battle → Guardian
+ * → Flask → Food → Scroll) so the flask exclusion logic at the end works
+ * correctly.
  */
 export const CONSUMABLE_CATEGORIES: ConsumableCategory[] = [
   {
     id: "battleElixir",
     label: "Battle Elixir",
-    description: "Damage-focused elixir. Mutually exclusive with flask + guardian.",
+    description:
+      "Damage-focused elixir. Mutually exclusive with flask + guardian.",
     spellIds: [
-      // TBC battle elixirs
-      28491, // Adept's Elixir (sp + spell crit)
-      28493, // Elixir of Major Shadow Power
-      28497, // Elixir of Major Strength
-      28501, // Elixir of Major Frost Power
-      28503, // Elixir of Major Firepower
-      33726, // Elixir of Mastery (all stats)
-      45373, // Elixir of Major Agility (crit + dodge)
-      54452, // Adept's Elixir alt rank
-      // Pre-TBC battle elixirs still legal in TBC
-      11406, // Elixir of Demonslaying
-      17537, // Elixir of Brute Force
-      17538, // Elixir of the Mongoose (per source labeling)
-      17539, // Greater Arcane Elixir
-      22817, // Elixir of Frost Power
-      22818, // Elixir of Greater Firepower
-      24361, // Elixir of Greater Agility
-      // Wrath ports source script references defensively
-      43722, // Wrath frost
-      39628, // Wrath
+      10667, 10669, 11334, 11405, 11406, 11474, 16323, 16329, 17038, 17537,
+      17538, 17539, 26276, 28490, 28491, 28493, 28497, 28501, 28503, 33720,
+      33721, 33726, 38954, 45373, 45374,
     ],
   },
   {
     id: "guardianElixir",
     label: "Guardian Elixir",
-    description: "Defensive elixir. Mutually exclusive with flask + battle.",
+    description:
+      "Defensive elixir. Mutually exclusive with flask + battle.",
     spellIds: [
-      // TBC guardian elixirs
-      28502, // Elixir of Major Defense (550 armor)
-      28509, // Elixir of Major Mageblood (16 mp5)
-      39625, // Elixir of Major Fortitude (250 HP, 10 hp5)
-      39626, // Earthen Elixir (caster armor)
-      33077, // Elixir of Empowerment (-30 spell resist) — sometimes battle, often guardian
-      // Pre-TBC guardian elixirs
-      22833, // Elixir of Greater Defense
-      11334, // Elixir of the Sages
+      10668, 10692, 10693, 11348, 11371, 11374, 11396, 17535, 24361, 24363,
+      24382, 24383, 24417, 28502, 28509, 28514, 30003, 39625, 39626, 39627,
+      39628,
     ],
   },
   {
@@ -98,22 +86,9 @@ export const CONSUMABLE_CATEGORIES: ConsumableCategory[] = [
     label: "Flask",
     description: "Persists through death. Mutually exclusive with elixirs.",
     spellIds: [
-      // TBC flasks
-      28518, // Flask of Fortification
-      28519, // Flask of Relentless Assault
-      28520, // Flask of Blinding Light
-      28521, // Flask of Mighty Restoration
-      28540, // Flask of Pure Death
-      41608, // Flask of Chromatic Wonder
-      // Shattrath (raid-only, double-strength) flasks
-      42735, 42736, 42737, 42738, 42739,
-      // Vanilla flasks still legal in TBC
-      17626, // Flask of the Titans
-      17627, // Flask of Distilled Wisdom
-      17628, // Flask of Supreme Power
-      17629, // Flask of Chromatic Resistance
-      // Wrath flasks source script references defensively
-      46840, 46838,
+      17626, 17627, 17628, 17629, 28518, 28519, 28520, 28521, 28540, 40576,
+      40577, 40579, 40580, 40582, 40586, 40587, 40588, 40763, 41604, 41605,
+      41606, 41607, 42735, 46838, 46840,
     ],
   },
   {
@@ -121,68 +96,35 @@ export const CONSUMABLE_CATEGORIES: ConsumableCategory[] = [
     label: "Food buff (Well Fed)",
     description: "Per-stat food bonus. Lost on death.",
     spellIds: [
-      33256, // Spicy Hot Talbuk (30 hit)
-      33257, // Roasted Clefthoof (20 str)
-      33259, // Skullfish Soup (20 spell crit)
-      33261, // Crunchy Serpent (23 spell dmg)
-      33263, // Blackened Sporefish (8 mp5)
-      33265, // Grilled Mudfish (20 agi)
-      33268, // Poached Bluefish (23 spell dmg)
-      33269, // Golden Fish Sticks (44 heal / 14 spell)
-      33272, // Stormchops (20 hit)
-      35272, // Crunchy Serpent (alt rank)
-      40539, // Blackened Basilisk
-      40543, // Spicy Crawdad
-      40745, // Fisherman's Feast
-      18192, // Grilled Squid (Vanilla)
-      24799, // Smoked Desert Dumpling
-      // Wrath foods the source script references defensively
-      39627, 43764, 44106, 40323,
-    ],
-  },
-  {
-    id: "weaponEnhance",
-    label: "Weapon oil / stone",
-    description: "Superior Wizard Oil, Adamantite Sharpening Stone, etc.",
-    spellIds: [
-      28013, // Superior Wizard Oil
-      28019, // Brilliant Wizard Oil
-      28017, // Superior Mana Oil
-      25123, // Superior Mana Oil (alt)
-      29453, // Adamantite Sharpening Stone
-      29452, // Adamantite Weightstone
-      28583, // Adamantite Sharpening Stone (alt id)
-      20749, // Brilliant Mana Oil
-      20748, // Brilliant Wizard Oil
-      20747, // Lesser Mana Oil
+      19705, 19706, 19708, 19709, 19710, 19711, 22730, 22731, 24799, 24870,
+      25660, 25661, 25694, 25804, 25941, 33254, 33256, 33257, 33259, 33261,
+      33263, 33265, 33268, 35272, 40323, 42293, 43730, 43731, 43733, 43764,
+      43771, 44097, 44098, 44099, 44100, 44101, 44102, 44103, 44104, 44105,
+      44106, 45245, 45619, 46682, 46687, 46899, 43722, 21149,
     ],
   },
   {
     id: "scroll",
     label: "Scroll (stat)",
-    description: "Cheaper temporary stat boost.",
+    description: "Cheaper temporary stat boost. *  = below level 5.",
     spellIds: [
-      33093, // Scroll of Strength V
-      33092, // Scroll of Stamina V
-      33078, // Scroll of Agility V
-      33079, // Scroll of Spirit V
-      33081, // Scroll of Protection V (armor)
-      33080, // Scroll of Intellect V
-    ],
-  },
-  {
-    id: "drum",
-    label: "Drums",
-    description: "Drums of Battle / War / Restoration — group buff. Only counts the player who cast the drum.",
-    spellIds: [
-      35476, // Drums of Battle
-      35474, // Drums of Panic
-      35478, // Drums of Restoration
-      35477, // Drums of Speed
-      35475, // Drums of War
+      33077, 33078, 33079, 33080, 33081, 33082, 12174, 8117, 8116, 8115, 12176,
+      8098, 8097, 8096, 12175, 8095, 8094, 8091, 12177, 8114, 8113, 8112,
+      12178, 8101, 8100, 8099, 12179, 8120, 8119, 8118,
     ],
   },
 ];
+
+/**
+ * Spell ids of "low-rank" scrolls — source marks these with `*` in their
+ * cell label (see the `[Agi*]` etc. entries in the conf sheet). We surface
+ * the marker in the tooltip so users can spot when someone scrolled rank IV
+ * instead of V.
+ */
+const LOW_LEVEL_SCROLL_IDS = new Set<number>([
+  12174, 8117, 8116, 8115, 12176, 8098, 8097, 8096, 12175, 8095, 8094, 8091,
+  12177, 8114, 8113, 8112, 12178, 8101, 8100, 8099, 12179, 8120, 8119, 8118,
+]);
 
 const idToCategory = new Map<number, string>();
 for (const cat of CONSUMABLE_CATEGORIES) {
@@ -190,33 +132,73 @@ for (const cat of CONSUMABLE_CATEGORIES) {
 }
 
 /**
- * Name-pattern fallback for auras whose spell id isn't curated. Returns the
- * category id, or null to ignore.
+ * Ports the class-vs-spell-id gate from Consumables.gs:275. Returns true if
+ * the consumable is suboptimal for this class.
  *
- * Order matters: Guardian-specific elixir names must match before the
- * generic "Elixir of *" rule so Major Defense / Mageblood / Fortitude etc.
- * don't fall into Battle.
+ * NOTE: source's first clause uses font-italic style on the cell to mark
+ * generally-low-tier consumables (e.g. lesser elixirs vs major). We don't
+ * have access to the sheet's cell formatting so that clause is skipped here;
+ * everything that follows is the explicit class-vs-spell-id list and is
+ * ported verbatim.
  */
-function categorizeByName(name: string): string | null {
-  if (/^Drums? of /i.test(name)) return "drum";
-  if (/^Flask of /i.test(name)) return "flask";
-  if (/^Scroll of /i.test(name)) return "scroll";
-  if (/^Well Fed$/i.test(name)) return "food";
-  if (/(Wizard Oil|Mana Oil|Sharpening Stone|Weightstone)/i.test(name)) {
-    return "weaponEnhance";
-  }
+function isSuboptimalForPlayer(spellId: number, playerType: string): boolean {
+  const id = spellId;
+  const t = playerType;
+  // 33721 — battle elixir, suboptimal for non-caster
+  if (id === 33721 && t !== "Mage" && t !== "Paladin" && t !== "Druid" && t !== "Shaman") return true;
+  // (11406, 28497, 43764, 28520, 41606, 11374) — physical/strength buffs, suboptimal for casters
   if (
-    /^Elixir of (Major Defense|Major Mageblood|Major Fortitude|Greater Defense|the Sages|Empowerment)$/i.test(
-      name,
-    )
-  ) {
-    return "guardianElixir";
-  }
-  if (/^Earthen Elixir$/i.test(name)) return "guardianElixir";
-  if (/^(Elixir of |Adept's Elixir|Greater Arcane Elixir)/i.test(name)) {
-    return "battleElixir";
-  }
-  return null;
+    (id === 11406 || id === 28497 || id === 43764 || id === 28520 || id === 41606 || id === 11374) &&
+    t !== "Rogue" && t !== "Druid" && t !== "Warrior" && t !== "Shaman" && t !== "Hunter" && t !== "Paladin"
+  ) return true;
+  // (28491, 33268, 17627) — spell-crit/spirit, suboptimal for non-caster-healers
+  if (
+    (id === 28491 || id === 33268 || id === 17627) &&
+    t !== "Druid" && t !== "Priest" && t !== "Paladin" && t !== "Shaman"
+  ) return true;
+  // 28493 — shadow power, only mage
+  if (id === 28493 && t !== "Mage") return true;
+  // (28501, 43722) — frost power, mages/warlocks only
+  if ((id === 28501 || id === 43722) && t !== "Mage" && t !== "Warlock") return true;
+  // 28503 — fire power, warlocks/priests only
+  if (id === 28503 && t !== "Warlock" && t !== "Priest") return true;
+  // (33726, 28502, 28518, 41607) — defense/all-stats, hybrids/warrior only
+  if (
+    (id === 33726 || id === 28502 || id === 28518 || id === 41607) &&
+    t !== "Druid" && t !== "Paladin" && t !== "Warrior"
+  ) return true;
+  // (28521, 46840) — mighty restoration / wrath equivalent, mp5 classes only
+  if (
+    (id === 28521 || id === 46840) &&
+    t !== "Druid" && t !== "Paladin" && t !== "Mage" && t !== "Shaman"
+  ) return true;
+  // (28540, 46838) — pure death (shadow flask), spell DPS only
+  if (
+    (id === 28540 || id === 46838) &&
+    t !== "Priest" && t !== "Warlock" && t !== "Mage"
+  ) return true;
+  // 28509 — major mageblood (mp5), SUBOPTIMAL when used by mana-irrelevant classes
+  if (
+    id === 28509 &&
+    (t === "Rogue" || t === "Warrior" || t === "Mage" || t === "Warlock")
+  ) return true;
+  // (39627, 33263, 33265) — spell-haste / spell-crit / agi food, SUBOPTIMAL for physical DPS
+  if (
+    (id === 39627 || id === 33263 || id === 33265) &&
+    (t === "Rogue" || t === "Warrior" || t === "Hunter")
+  ) return true;
+  // (33256, 44106, 40323) — hit-rating food, suboptimal for non-physical-melee
+  if (
+    (id === 33256 || id === 44106 || id === 40323) &&
+    t !== "Shaman" && t !== "Paladin" && t !== "Warrior"
+  ) return true;
+  // 33261 — spell-damage food, suboptimal for physical
+  if (id === 33261 && t !== "Druid" && t !== "Hunter" && t !== "Rogue") return true;
+  // 39628 — agility food, only druid
+  if (id === 39628 && t !== "Druid") return true;
+  // 17538 — mongoose elixir, suboptimal for non-melee/hunter
+  if (id === 17538 && t !== "Warrior" && t !== "Hunter" && t !== "Rogue") return true;
+  return false;
 }
 
 export interface ConsumableUse {
@@ -227,6 +209,13 @@ export interface ConsumableUse {
   /** Best (most-frequent) spell id within the category, for tooltip. */
   bestSpellId?: number;
   bestSpellName?: string;
+  /**
+   * True if any of the spells used in this category were flagged suboptimal
+   * for the player's class. Mirrors source's `isPlayerACheapass` per-cell flag.
+   */
+  suboptimal?: boolean;
+  /** Comma-joined names of the suboptimal spells (for tooltip), if any. */
+  suboptimalNames?: string;
 }
 
 export interface PlayerConsumables {
@@ -264,9 +253,8 @@ export async function fetchConsumables(
     ...input.clientOptions,
     apiKey: input.apiKey,
   });
-  // mode "all" = no `&encounter=` filter. We want WCL to return auras across
-  // the whole report (so bands that span pre-pull → boss are returned in
-  // full), then we filter to boss fights client-side via band intersection.
+  // mode "all" so WCL returns auras across the whole report; we filter to
+  // boss fights client-side via band intersection.
   const endpoints = makeUrls({
     lang: "EN",
     apiKey: input.apiKey,
@@ -276,13 +264,12 @@ export async function fetchConsumables(
   });
 
   const fightsRaw = await client.getJson<FightsResponse>(endpoints.fights);
-  // Source script only evaluates boss fights (Consumables.gs:215, line 267
-  // filters on fight.boss > 0 OR fight.originalBoss). Match that exactly.
+  // Source only evaluates boss fights (Consumables.gs:215, 244).
   const bossFights = fightsRaw.fights.filter(
     (f) => f.boss > 0 && f.end_time > f.start_time,
   );
 
-  // Player roster (filter low-activity entries the same way the source does).
+  // Player roster filter — source skips players with total < 20.
   const peopleData = await client.getJson<TableResponse>(
     endpoints.peopleTracked,
   );
@@ -290,9 +277,9 @@ export async function fetchConsumables(
     (e) => (e.total ?? 0) > 20,
   );
 
-  // Build the buffs URL inline — buffsTotalPrefix uses by=target&targetid=
-  // which doesn't match what we need. Source uses sourceid (per-fight,
-  // Consumables.gs:246); we use sourceid covering the whole report.
+  // Source uses &sourceid=PLAYER per-fight (Consumables.gs:246). We do one
+  // whole-report query per player and band-intersect each boss fight, which
+  // is equivalent and much cheaper.
   const buffsBase =
     `${endpoints.base}report/tables/buffs/${parsed.logId}` +
     `${endpoints.apiKeyString}` +
@@ -329,11 +316,10 @@ function computePlayerConsumables(
 ): PlayerConsumables {
   const auras = data.auras ?? [];
 
-  // ---- Determine which boss fights the player participated in ----
-  // Source's heuristic: fights where bossData.auras was non-empty after a
-  // sourceid query for that fight. With our whole-report query, an aura
-  // overlapping the fight window is equivalent. We need at least ONE aura
-  // band overlapping the fight to count it as "participated."
+  // ---- Participation set: fights where the player had any aura band ----
+  // Source line 250-254: playerFightCount increments per-fight only if the
+  // sourceid query returned auras. Equivalent: at least one of OUR aura
+  // entries has a band overlapping this fight.
   const participatedFightIds = new Set<number>();
   for (const fight of bossFights) {
     for (const aura of auras) {
@@ -345,34 +331,40 @@ function computePlayerConsumables(
   }
   const playerFightCount = participatedFightIds.size;
 
-  // ---- For each boss fight, determine which categories were active ----
-  type Hit = { spellId: number; spellName: string };
+  // ---- Per-category, per-fight hits ----
+  type Hit = { spellId: number; spellName: string; suboptimal: boolean };
   const hitsByCategory = new Map<string, Map<number, Hit>>();
   for (const cat of CONSUMABLE_CATEGORIES) hitsByCategory.set(cat.id, new Map());
 
   for (const aura of auras) {
-    if (!aura.guid) continue;
-    const cat = idToCategory.get(aura.guid) ?? categorizeByName(aura.name ?? "");
+    if (aura.guid == null) continue;
+    // Source matches by spell id only (no name fallback). If an id isn't in
+    // the conf table, source ignores it — we do the same.
+    const cat = idToCategory.get(aura.guid);
     if (!cat) continue;
     const bucket = hitsByCategory.get(cat);
     if (!bucket) continue;
     const bands = aura.bands ?? [];
+    const suboptimal = isSuboptimalForPlayer(aura.guid, player.type);
+    let label = aura.name ?? `spell ${aura.guid}`;
+    if (cat === "scroll" && LOW_LEVEL_SCROLL_IDS.has(aura.guid)) label += "*";
     for (const fight of bossFights) {
       if (!participatedFightIds.has(fight.id)) continue;
-      if (anyBandOverlaps(bands, fight.start_time, fight.end_time)) {
-        if (!bucket.has(fight.id)) {
-          bucket.set(fight.id, {
-            spellId: aura.guid,
-            spellName: aura.name ?? `spell ${aura.guid}`,
-          });
-        }
+      if (!anyBandOverlaps(bands, fight.start_time, fight.end_time)) continue;
+      if (!bucket.has(fight.id)) {
+        bucket.set(fight.id, {
+          spellId: aura.guid,
+          spellName: label,
+          suboptimal,
+        });
       }
     }
   }
 
-  // ---- Flask vs (battle|guardian) mutual exclusion ----
-  // Source Consumables.gs:272 + 289-290: if a fight had battle OR guardian
-  // elixir, drop it from the flask count (you can't have both).
+  // ---- Flask vs (battle | guardian) mutual exclusion ----
+  // Source Consumables.gs:272 + 289-290: a fight where battle OR guardian
+  // was active is removed from the flask count (they're mutually exclusive
+  // in TBC — using a flask cancels any active elixir).
   const flaskBucket = hitsByCategory.get("flask");
   const battleBucket = hitsByCategory.get("battleElixir");
   const guardianBucket = hitsByCategory.get("guardianElixir");
@@ -384,16 +376,31 @@ function computePlayerConsumables(
     }
   }
 
-  // ---- Compute per-category use info ----
+  // ---- Reduce to ConsumableUse per category ----
   const byCategory = new Map<string, ConsumableUse>();
   for (const cat of CONSUMABLE_CATEGORIES) {
     const bucket = hitsByCategory.get(cat.id);
     if (!bucket || bucket.size === 0) continue;
-    const perSpell = new Map<number, { count: number; name: string }>();
+    // Per-spell counts to pick "best" (most-used) for the tooltip.
+    const perSpell = new Map<
+      number,
+      { count: number; name: string; suboptimal: boolean }
+    >();
+    let anySuboptimal = false;
+    const suboptimalNamesSet = new Set<string>();
     for (const hit of bucket.values()) {
       const prev = perSpell.get(hit.spellId);
       if (prev) prev.count++;
-      else perSpell.set(hit.spellId, { count: 1, name: hit.spellName });
+      else
+        perSpell.set(hit.spellId, {
+          count: 1,
+          name: hit.spellName,
+          suboptimal: hit.suboptimal,
+        });
+      if (hit.suboptimal) {
+        anySuboptimal = true;
+        suboptimalNamesSet.add(hit.spellName);
+      }
     }
     let bestSpellId: number | undefined;
     let bestSpellName: string | undefined;
@@ -411,6 +418,10 @@ function computePlayerConsumables(
     };
     if (bestSpellId !== undefined) use.bestSpellId = bestSpellId;
     if (bestSpellName !== undefined) use.bestSpellName = bestSpellName;
+    if (anySuboptimal) {
+      use.suboptimal = true;
+      use.suboptimalNames = [...suboptimalNamesSet].join(", ");
+    }
     byCategory.set(cat.id, use);
   }
 

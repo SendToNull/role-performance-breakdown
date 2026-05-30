@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 import {
   CONSUMABLE_CATEGORIES,
   type ConsumablesResult,
@@ -86,12 +86,23 @@ function PlayerRow({ player }: { player: PlayerConsumables }) {
         const tooltip =
           `${cat.label}\n` +
           `${use.fightsWithUsage} of ${denom} fights` +
-          (use.bestSpellName ? `\nMost used: ${use.bestSpellName}` : "");
+          (use.bestSpellName ? `\nMost used: ${use.bestSpellName}` : "") +
+          (use.suboptimal && use.suboptimalNames
+            ? `\nSuboptimal for ${player.type}: ${use.suboptimalNames}`
+            : "");
+        // Source styles suboptimal cells with bold+italic on a gray
+        // background (Consumables.gs:314). Match that.
+        const cellStyle: CSSProperties = use.suboptimal
+          ? { backgroundColor: "#cccccc" }
+          : { backgroundColor: greenForPct(pct) };
+        const fontClasses = use.suboptimal
+          ? "italic font-bold"
+          : "";
         return (
           <td
             key={cat.id}
-            className="min-w-[110px] border-r border-zinc-800/60 px-1 py-1 text-center tabular-nums"
-            style={{ backgroundColor: greenForPct(pct) }}
+            className={`min-w-[110px] border-r border-zinc-800/60 px-1 py-1 text-center tabular-nums ${fontClasses}`}
+            style={cellStyle}
             title={tooltip}
           >
             <span className="text-zinc-900">
